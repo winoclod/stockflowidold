@@ -159,9 +159,63 @@ const IDX_SECTORS = {
   'Electronic Technology': ['MTDL', 'PTSN', 'AXIO', 'IKBI', 'LPIN', 'ZYRX', 'RCCC']
 };
 
-// Initialize bot
+// Initialize bot with webhook
 const token = process.env.TELEGRAM_BOT_TOKEN;
-const bot = new TelegramBot(token, { polling: true });
+const PORT = process.env.PORT || 3000;
+const WEBHOOK_URL = process.env.RAILWAY_PUBLIC_DOMAIN 
+  ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
+  : process.env.WEBHOOK_URL;
+
+// Use polling for local development, webhook for production
+const USE_WEBHOOK = process.env.RAILWAY_ENVIRONMENT === 'production' || process.env.USE_WEBHOOK === 'true';
+
+let bot;
+
+if (USE_WEBHOOK && WEBHOOK_URL) {
+  console.log('🌐 Starting in WEBHOOK mode');
+  bot = new TelegramBot(token, { webHook: true });
+  
+  // Set webhook
+  const webhookPath = `/bot${token}`;
+  bot.setWebHook(`${WEBHOOK_URL}${webhookPath}`)
+    .then(() => {
+      console.log(`✅ Webhook set to: ${WEBHOOK_URL}${webhookPath}`);
+    })
+    .catch(err => {
+      console.error('❌ Failed to set webhook:', err.message);
+    });
+  
+  // Create express server for webhook
+  const express = require('express');
+  const bodyParser = require('body-parser');
+  const app = express();
+  
+  app.use(bodyParser.json());
+  
+  // Health check endpoint
+  app.get('/', (req, res) => {
+    res.json({
+      status: 'running',
+      mode: 'webhook',
+      bot: 'IDX Stock Screener Enhanced',
+      version: '2.0.0'
+    });
+  });
+  
+  // Webhook endpoint
+  app.post(webhookPath, (req, res) => {
+    bot.processUpdate(req.body);
+    res.sendStatus(200);
+  });
+  
+  // Start server
+  app.listen(PORT, () => {
+    console.log(`🚀 Webhook server listening on port ${PORT}`);
+  });
+} else {
+  console.log('📡 Starting in POLLING mode (local development)');
+  bot = new TelegramBot(token, { polling: true });
+}
 
 // Helper Functions
 function calculateStochastic(data) {
