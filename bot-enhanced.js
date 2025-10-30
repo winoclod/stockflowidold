@@ -1172,7 +1172,7 @@ bot.onText(/\/subscribe/, (msg) => {
       const escapedSectors = userSelectedSectors.map(s => s.replace(/_/g, '\\_'));
       
       bot.sendMessage(chatId, `
-🔔 *Subscribed to Auto-Scan Alerts!*
+🔔 Subscribed to Auto-Scan Alerts!
 
 You will receive alerts at:
 ☀️ 08:00 WIB - Daily Summary
@@ -1180,12 +1180,12 @@ You will receive alerts at:
 🌤️ 13:00 WIB - Afternoon Scan
 🌆 16:00 WIB - Evening Scan
 
-*Your monitored sectors (${escapedSectors.length}):*
-${escapedSectors.map(s => `• ${s}`).join('\n')}
+Your monitored sectors: ${userSelectedSectors.length} sectors
+${userSelectedSectors.map(s => `• ${s}`).join('\n')}
 
 Use /mysectors to customize
 Use /unsubscribe to stop alerts
-      `, { parse_mode: 'Markdown' });
+      `);
     }
   })) return;
 });
