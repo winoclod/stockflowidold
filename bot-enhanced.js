@@ -1150,48 +1150,64 @@ bot.onText(/\/help/, (msg) => {
 
 bot.onText(/\/subscribe/, (msg) => {
   const chatId = msg.chat.id;
+  console.log(`[SUBSCRIBE] Command received from chatId: ${chatId}`);
   
   if (!checkAccess(msg, () => {
     try {
+      console.log(`[SUBSCRIBE] Access granted for chatId: ${chatId}`);
+      
       if (subscribers.has(chatId)) {
+        console.log(`[SUBSCRIBE] User already subscribed: ${chatId}`);
         bot.sendMessage(chatId, '✅ You are already subscribed to auto-scan alerts!');
       } else {
+        console.log(`[SUBSCRIBE] Adding new subscriber: ${chatId}`);
         subscribers.add(chatId);
         
         // Set default sectors if user doesn't have any
         if (!userSectors.has(chatId)) {
+          console.log(`[SUBSCRIBE] Setting default sectors for: ${chatId}`);
           userSectors.set(chatId, AUTO_SCAN_CONFIG.DEFAULT_SECTORS);
         }
         
+        console.log(`[SUBSCRIBE] Saving data...`);
         saveData();
+        console.log(`[SUBSCRIBE] Data saved successfully`);
         
         const userSelectedSectors = getUserSectors(chatId);
+        console.log(`[SUBSCRIBE] User has ${userSelectedSectors.length} sectors`);
         
-        bot.sendMessage(chatId, 
-`🔔 <b>Subscribed to Auto-Scan Alerts!</b>
-
-You will receive alerts at:
-☀️ 08:00 WIB - Daily Summary
-☀️ 10:00 WIB - Morning Scan
-🌤️ 13:00 WIB - Afternoon Scan
-🌆 16:00 WIB - Evening Scan
-
-<b>Your monitored sectors:</b> ${userSelectedSectors.length} sectors
-${userSelectedSectors.map(s => `• ${s}`).join('\n')}
-
-Use /mysectors to customize
-Use /unsubscribe to stop alerts`, 
-          { parse_mode: 'HTML' }
-        ).catch(err => {
-          console.error('Error sending subscribe message:', err);
-          bot.sendMessage(chatId, '✅ Subscribed! However, there was an error showing details. Use /mysectors to view.');
-        });
+        const message = '🔔 Subscribed to Auto-Scan Alerts!\n\n' +
+          'You will receive alerts at:\n' +
+          '☀️ 08:00 WIB - Daily Summary\n' +
+          '☀️ 10:00 WIB - Morning Scan\n' +
+          '🌤️ 13:00 WIB - Afternoon Scan\n' +
+          '🌆 16:00 WIB - Evening Scan\n\n' +
+          `Your monitored sectors: ${userSelectedSectors.length}\n` +
+          userSelectedSectors.map(s => '• ' + s).join('\n') + '\n\n' +
+          'Use /mysectors to customize\n' +
+          'Use /unsubscribe to stop alerts';
+        
+        console.log(`[SUBSCRIBE] Sending message to ${chatId}, length: ${message.length} chars`);
+        
+        bot.sendMessage(chatId, message)
+          .then(() => {
+            console.log(`[SUBSCRIBE] ✅ Message sent successfully to ${chatId}`);
+          })
+          .catch(err => {
+            console.error(`[SUBSCRIBE] ❌ Error sending message to ${chatId}:`, err.message);
+            bot.sendMessage(chatId, '✅ Subscribed! Use /mysectors to view your sectors.');
+          });
       }
+      
+      console.log(`[SUBSCRIBE] Command completed for ${chatId}`);
     } catch (error) {
-      console.error('Error in subscribe command:', error);
+      console.error(`[SUBSCRIBE] ❌ Exception in subscribe command:`, error);
       bot.sendMessage(chatId, '❌ Error processing subscription. Please try again.');
     }
-  })) return;
+  })) {
+    console.log(`[SUBSCRIBE] Access denied for chatId: ${chatId}`);
+    return;
+  }
 });
 
 bot.onText(/\/unsubscribe/, (msg) => {
