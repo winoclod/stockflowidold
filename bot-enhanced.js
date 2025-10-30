@@ -852,6 +852,12 @@ function hasAccess(chatId) {
   return false;
 }
 
+// Helper function to escape markdown special characters
+function escapeMarkdown(text) {
+  if (!text) return text;
+  return text.toString().replace(/[_*[\]()~`>#+=|{}.!-]/g, '\\$&');
+}
+
 function checkAccess(msg, callback) {
   const chatId = msg.chat.id;
   
@@ -1012,6 +1018,36 @@ Welcome! I can help you screen Indonesian stocks using Stochastic Oscillator (10
   })) return;
 });
 
+// Debug command - helps users find their Telegram ID
+bot.onText(/\/myid/, (msg) => {
+  const chatId = msg.chat.id;
+  const user = msg.from;
+  
+  let message = `🆔 *Your Telegram Information*\n\n`;
+  message += `ID: \`${chatId}\`\n`;
+  message += `First Name: ${user.first_name || 'N/A'}\n`;
+  if (user.last_name) message += `Last Name: ${user.last_name}\n`;
+  if (user.username) message += `Username: @${user.username}\n`;
+  message += `\n`;
+  
+  // Check if admin
+  if (CONFIG.ADMIN_ID) {
+    if (isAdmin(chatId)) {
+      message += `✅ You are the bot administrator\n`;
+    } else {
+      message += `⚠️ You are NOT the administrator\n`;
+      message += `Admin ID is set to: \`${CONFIG.ADMIN_ID}\`\n`;
+      message += `Your ID is: \`${chatId}\`\n\n`;
+      message += `To become admin, set ADMIN_TELEGRAM_ID=${chatId} in Railway\n`;
+    }
+  } else {
+    message += `⚠️ No admin configured\n`;
+    message += `Set ADMIN_TELEGRAM_ID=${chatId} in Railway to become admin\n`;
+  }
+  
+  bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
+});
+
 bot.onText(/\/help/, (msg) => {
   const chatId = msg.chat.id;
   bot.sendMessage(chatId, `
@@ -1040,6 +1076,9 @@ bot.onText(/\/help/, (msg) => {
 • /backtest BBCA - BBCA's signal history
 • /topstocks - Best performing stocks
 
+*Debug:*
+• /myid - Get your Telegram ID (for admin setup)
+
 *Settings:*
 • K Period: ${CONFIG.STOCH_K_PERIOD}
 • Oversold: ${CONFIG.OVERSOLD_LEVEL}
@@ -1060,21 +1099,25 @@ bot.onText(/\/help/, (msg) => {
 bot.onText(/\/subscribe/, (msg) => {
   const chatId = msg.chat.id;
   
-  if (subscribers.has(chatId)) {
-    bot.sendMessage(chatId, '✅ You are already subscribed to auto-scan alerts!');
-  } else {
-    subscribers.add(chatId);
-    
-    // Set default sectors if user doesn't have any
-    if (!userSectors.has(chatId)) {
-      userSectors.set(chatId, AUTO_SCAN_CONFIG.DEFAULT_SECTORS);
-    }
-    
-    saveData();
-    
-    const userSelectedSectors = getUserSectors(chatId);
-    
-    bot.sendMessage(chatId, `
+  if (!checkAccess(msg, () => {
+    if (subscribers.has(chatId)) {
+      bot.sendMessage(chatId, '✅ You are already subscribed to auto-scan alerts!');
+    } else {
+      subscribers.add(chatId);
+      
+      // Set default sectors if user doesn't have any
+      if (!userSectors.has(chatId)) {
+        userSectors.set(chatId, AUTO_SCAN_CONFIG.DEFAULT_SECTORS);
+      }
+      
+      saveData();
+      
+      const userSelectedSectors = getUserSectors(chatId);
+      
+      // Escape special markdown characters in sector names
+      const escapedSectors = userSelectedSectors.map(s => s.replace(/_/g, '\\_'));
+      
+      bot.sendMessage(chatId, `
 🔔 *Subscribed to Auto-Scan Alerts!*
 
 You will receive alerts at:
@@ -1083,25 +1126,28 @@ You will receive alerts at:
 🌤️ 13:00 WIB - Afternoon Scan
 🌆 16:00 WIB - Evening Scan
 
-*Your monitored sectors (${userSelectedSectors.length}):*
-${userSelectedSectors.map(s => `• ${s}`).join('\n')}
+*Your monitored sectors (${escapedSectors.length}):*
+${escapedSectors.map(s => `• ${s}`).join('\n')}
 
 Use /mysectors to customize
 Use /unsubscribe to stop alerts
-    `, { parse_mode: 'Markdown' });
-  }
+      `, { parse_mode: 'Markdown' });
+    }
+  })) return;
 });
 
 bot.onText(/\/unsubscribe/, (msg) => {
   const chatId = msg.chat.id;
   
-  if (subscribers.has(chatId)) {
-    subscribers.delete(chatId);
-    saveData();
-    bot.sendMessage(chatId, '❌ You have been unsubscribed from auto-scan alerts.\n\nUse /subscribe to re-enable.');
-  } else {
-    bot.sendMessage(chatId, 'You are not currently subscribed to alerts.\n\nUse /subscribe to enable alerts.');
-  }
+  if (!checkAccess(msg, () => {
+    if (subscribers.has(chatId)) {
+      subscribers.delete(chatId);
+      saveData();
+      bot.sendMessage(chatId, '❌ You have been unsubscribed from auto-scan alerts.\n\nUse /subscribe to re-enable.');
+    } else {
+      bot.sendMessage(chatId, 'You are not currently subscribed to alerts.\n\nUse /subscribe to enable alerts.');
+    }
+  })) return;
 });
 
 // FEATURE 1: Custom Sectors Commands
@@ -1477,39 +1523,83 @@ bot.onText(/\/stats/, (msg) => {
     return;
   }
   
-  let totalWatchedStocks = 0;
-  watchlist.forEach(stocks => totalWatchedStocks += stocks.length);
-  
-  let sectorDistribution = {};
-  userSectors.forEach(sectors => {
-    sectors.forEach(s => {
-      sectorDistribution[s] = (sectorDistribution[s] || 0) + 1;
+  try {
+    let totalWatchedStocks = 0;
+    watchlist.forEach(stocks => totalWatchedStocks += stocks.length);
+    
+    let sectorDistribution = {};
+    userSectors.forEach(sectors => {
+      sectors.forEach(s => {
+        sectorDistribution[s] = (sectorDistribution[s] || 0) + 1;
+      });
     });
-  });
+    
+    const topSectors = Object.entries(sectorDistribution)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5);
+    
+    let message = `📊 *Bot Statistics*\n\n`;
+    message += `👥 Total Users: ${userSectors.size}\n`;
+    message += `🔔 Subscribers: ${subscribers.size}\n`;
+    message += `👀 Total Watchlist Stocks: ${totalWatchedStocks}\n`;
+    
+    // Calculate average sectors per user (safe division)
+    const avgSectors = userSectors.size > 0 
+      ? (Array.from(userSectors.values()).reduce((sum, sectors) => sum + sectors.length, 0) / userSectors.size).toFixed(1)
+      : '0.0';
+    message += `📂 Avg Sectors/User: ${avgSectors}\n`;
+    message += `📊 Signal History: ${signalHistory.length} records\n\n`;
+    
+    if (topSectors.length > 0) {
+      message += `*Top 5 Monitored Sectors:*\n`;
+      topSectors.forEach(([sector, count], index) => {
+        message += `${index + 1}. ${sector}: ${count} users\n`;
+      });
+    } else {
+      message += `*No sector data yet*\n`;
+    }
+    
+    if (subscribers.size > 0) {
+      message += `\n*Subscriber Management:*\n`;
+      message += `/unsubscribeall - Unsubscribe all users\n`;
+      message += `/unsubscribeall_silent - Unsubscribe without notification\n`;
+    }
+    
+    bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
+  } catch (error) {
+    console.error('Error in /stats command:', error);
+    bot.sendMessage(chatId, `❌ Error generating statistics: ${error.message}`);
+  }
+});
+
+// Simple test command for debugging stats issues
+bot.onText(/\/teststats/, (msg) => {
+  const chatId = msg.chat.id;
   
-  const topSectors = Object.entries(sectorDistribution)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5);
-  
-  let message = `📊 *Bot Statistics*\n\n`;
-  message += `👥 Total Users: ${userSectors.size}\n`;
-  message += `🔔 Subscribers: ${subscribers.size}\n`;
-  message += `👀 Total Watchlist Stocks: ${totalWatchedStocks}\n`;
-  message += `📂 Avg Sectors/User: ${(Array.from(userSectors.values()).reduce((sum, sectors) => sum + sectors.length, 0) / userSectors.size || 0).toFixed(1)}\n`;
-  message += `📊 Signal History: ${signalHistory.length} records\n\n`;
-  
-  message += `*Top 5 Monitored Sectors:*\n`;
-  topSectors.forEach(([sector, count], index) => {
-    message += `${index + 1}. ${sector}: ${count} users\n`;
-  });
-  
-  if (subscribers.size > 0) {
-    message += `\n*Subscriber Management:*\n`;
-    message += `/unsubscribeall - Unsubscribe all users\n`;
-    message += `/unsubscribeall_silent - Unsubscribe without notification\n`;
+  if (!isAdmin(chatId)) {
+    bot.sendMessage(chatId, '❌ Admin only command');
+    return;
   }
   
-  bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
+  try {
+    // Simple version without markdown or complex formatting
+    let message = 'Test Stats:\n\n';
+    message += `Users: ${userSectors.size}\n`;
+    message += `Subscribers: ${subscribers.size}\n`;
+    message += `Watchlist: ${watchlist.size}\n`;
+    message += `Signals: ${signalHistory.length}\n`;
+    message += `Allowed: ${allowedUsers.size}\n`;
+    message += `Pending: ${pendingApprovals.size}\n`;
+    message += `Blocked: ${blockedUsers.size}\n\n`;
+    message += 'If you see this, basic stats work!\n';
+    message += 'Issue might be with Markdown formatting in /stats';
+    
+    bot.sendMessage(chatId, message);
+    console.log('✅ /teststats executed successfully for admin:', chatId);
+  } catch (error) {
+    bot.sendMessage(chatId, `Error in teststats: ${error.message}`);
+    console.error('Error in /teststats:', error);
+  }
 });
 
 bot.onText(/\/broadcast (.+)/, async (msg, match) => {
