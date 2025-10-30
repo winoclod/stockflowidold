@@ -961,14 +961,13 @@ function checkAccess(msg, callback) {
         const user = msg.from;
         const userName = user.username ? `@${user.username}` : user.first_name || 'Unknown';
         bot.sendMessage(CONFIG.ADMIN_ID,
-          `🔔 *New Access Request*\n\n` +
+          `🔔 New Access Request\n\n` +
           `User: ${userName}\n` +
           `Name: ${user.first_name} ${user.last_name || ''}\n` +
-          `ID: \`${chatId}\`\n\n` +
+          `ID: ${chatId}\n\n` +
           `Use /approve ${chatId} to grant access\n` +
-          `Use /deny ${chatId} to deny access`,
-          { parse_mode: 'Markdown' }
-        );
+          `Use /deny ${chatId} to deny access`
+        ).catch(err => console.error('Failed to notify admin:', err.message));
       }
     }
     return false;
@@ -1009,14 +1008,13 @@ function checkAccess(msg, callback) {
     // Notify admin of access attempt
     if (CONFIG.ADMIN_ID) {
       bot.sendMessage(CONFIG.ADMIN_ID,
-        `⚠️ *Unauthorized Access Attempt*\n\n` +
+        `⚠️ Unauthorized Access Attempt\n\n` +
         `User ID: ${chatId}\n` +
         `Username: @${msg.from.username || 'N/A'}\n` +
         `Name: ${msg.from.first_name || ''} ${msg.from.last_name || ''}\n\n` +
         `To add this user:\n` +
-        `Add \`${chatId}\` to WHITELIST_USERS`,
-        { parse_mode: 'Markdown' }
-      ).catch(() => {});
+        `Add ${chatId} to WHITELIST_USERS`
+      ).catch(err => console.error('Failed to notify admin:', err.message));
     }
     
     return false;
@@ -1154,25 +1152,23 @@ bot.onText(/\/subscribe/, (msg) => {
   const chatId = msg.chat.id;
   
   if (!checkAccess(msg, () => {
-    if (subscribers.has(chatId)) {
-      bot.sendMessage(chatId, '✅ You are already subscribed to auto-scan alerts!');
-    } else {
-      subscribers.add(chatId);
-      
-      // Set default sectors if user doesn't have any
-      if (!userSectors.has(chatId)) {
-        userSectors.set(chatId, AUTO_SCAN_CONFIG.DEFAULT_SECTORS);
-      }
-      
-      saveData();
-      
-      const userSelectedSectors = getUserSectors(chatId);
-      
-      // Escape special markdown characters in sector names
-      const escapedSectors = userSelectedSectors.map(s => s.replace(/_/g, '\\_'));
-      
-      bot.sendMessage(chatId, `
-🔔 Subscribed to Auto-Scan Alerts!
+    try {
+      if (subscribers.has(chatId)) {
+        bot.sendMessage(chatId, '✅ You are already subscribed to auto-scan alerts!');
+      } else {
+        subscribers.add(chatId);
+        
+        // Set default sectors if user doesn't have any
+        if (!userSectors.has(chatId)) {
+          userSectors.set(chatId, AUTO_SCAN_CONFIG.DEFAULT_SECTORS);
+        }
+        
+        saveData();
+        
+        const userSelectedSectors = getUserSectors(chatId);
+        
+        bot.sendMessage(chatId, 
+`🔔 <b>Subscribed to Auto-Scan Alerts!</b>
 
 You will receive alerts at:
 ☀️ 08:00 WIB - Daily Summary
@@ -1180,12 +1176,20 @@ You will receive alerts at:
 🌤️ 13:00 WIB - Afternoon Scan
 🌆 16:00 WIB - Evening Scan
 
-Your monitored sectors: ${userSelectedSectors.length} sectors
+<b>Your monitored sectors:</b> ${userSelectedSectors.length} sectors
 ${userSelectedSectors.map(s => `• ${s}`).join('\n')}
 
 Use /mysectors to customize
-Use /unsubscribe to stop alerts
-      `);
+Use /unsubscribe to stop alerts`, 
+          { parse_mode: 'HTML' }
+        ).catch(err => {
+          console.error('Error sending subscribe message:', err);
+          bot.sendMessage(chatId, '✅ Subscribed! However, there was an error showing details. Use /mysectors to view.');
+        });
+      }
+    } catch (error) {
+      console.error('Error in subscribe command:', error);
+      bot.sendMessage(chatId, '❌ Error processing subscription. Please try again.');
     }
   })) return;
 });
