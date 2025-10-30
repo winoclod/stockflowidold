@@ -18,6 +18,11 @@ const CONFIG = {
   TIMEZONE: 'Asia/Jakarta',
   ADMIN_ID: process.env.ADMIN_TELEGRAM_ID || '', // Set your Telegram user ID here
   DATA_DIR: './data',
+  
+  // ACCESS CONTROL
+  ACCESS_MODE: process.env.ACCESS_MODE || 'open', // 'open', 'whitelist', or 'approval'
+  WHITELIST_USERS: (process.env.WHITELIST_USERS || '').split(',').map(id => id.trim()).filter(Boolean),
+  // Example: WHITELIST_USERS=123456789,987654321,555555555
 };
 
 // Create data directory if it doesn't exist
@@ -52,6 +57,23 @@ const userSectors = new Map(); // chatId -> [sectors]
 const watchlist = new Map(); // chatId -> [symbols]
 const priceAlerts = new Map(); // chatId -> [{symbol, condition, price}]
 const lastScanResults = new Map(); // Store last scan results for daily summary
+const allowedUsers = new Set(); // Whitelist of allowed user IDs
+const pendingApprovals = new Set(); // Users waiting for approval
+const blockedUsers = new Set(); // Blocked users
+
+// Signal history tracking
+const signalHistory = []; // Array of {symbol, date, signal, entryPrice, currentPrice, result, days}
+// Structure: {
+//   symbol: 'BBCA',
+//   signalDate: '2024-10-25',
+//   signalType: 'BUY' or 'POTENTIAL',
+//   entryPrice: 9250,
+//   checkDate: '2024-10-30',
+//   exitPrice: 9500,
+//   returnPct: 2.7,
+//   result: 'PROFIT' or 'LOSS',
+//   days: 5
+// }
 
 // Load persistent data
 function loadData() {
@@ -70,8 +92,20 @@ function loadData() {
       if (data.priceAlerts) Object.entries(data.priceAlerts).forEach(([id, alerts]) => 
         priceAlerts.set(parseInt(id), alerts)
       );
+      if (data.allowedUsers) data.allowedUsers.forEach(id => allowedUsers.add(id));
+      if (data.pendingApprovals) data.pendingApprovals.forEach(id => pendingApprovals.add(id));
+      if (data.blockedUsers) data.blockedUsers.forEach(id => blockedUsers.add(id));
+      if (data.signalHistory) signalHistory.push(...data.signalHistory);
       
       console.log('✅ Data loaded successfully');
+      console.log(`   Users: ${allowedUsers.size} allowed, ${pendingApprovals.size} pending, ${blockedUsers.size} blocked`);
+      console.log(`   Signal History: ${signalHistory.length} records`);
+    }
+    
+    // Load whitelist from environment variable
+    if (CONFIG.ACCESS_MODE === 'whitelist' && CONFIG.WHITELIST_USERS.length > 0) {
+      CONFIG.WHITELIST_USERS.forEach(id => allowedUsers.add(parseInt(id)));
+      console.log(`✅ Whitelist loaded: ${CONFIG.WHITELIST_USERS.length} users`);
     }
   } catch (error) {
     console.error('Error loading data:', error.message);
@@ -85,6 +119,10 @@ function saveData() {
       userSectors: Object.fromEntries(userSectors),
       watchlist: Object.fromEntries(watchlist),
       priceAlerts: Object.fromEntries(priceAlerts),
+      allowedUsers: Array.from(allowedUsers),
+      pendingApprovals: Array.from(pendingApprovals),
+      blockedUsers: Array.from(blockedUsers),
+      signalHistory: signalHistory,
       lastUpdate: new Date().toISOString()
     };
     
@@ -346,6 +384,222 @@ function getUserSectors(chatId) {
   return userSectors.get(chatId) || AUTO_SCAN_CONFIG.DEFAULT_SECTORS;
 }
 
+// Signal History Tracking Functions
+function recordSignal(symbol, signalType, price) {
+  const today = new Date().toISOString().split('T')[0];
+  
+  // Check if we already have this signal today
+  const exists = signalHistory.some(s => 
+    s.symbol === symbol && 
+    s.signalDate === today && 
+    s.signalType === signalType
+  );
+  
+  if (!exists) {
+    signalHistory.push({
+      symbol,
+      signalDate: today,
+      signalType,
+      entryPrice: parseFloat(price),
+      recorded: new Date().toISOString()
+    });
+    
+    // Keep only last 90 days of history
+    const ninetyDaysAgo = new Date();
+    ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+    const cutoff = ninetyDaysAgo.toISOString().split('T')[0];
+    
+    const filtered = signalHistory.filter(s => s.signalDate >= cutoff);
+    signalHistory.length = 0;
+    signalHistory.push(...filtered);
+    
+    saveData();
+  }
+}
+
+async function updateSignalPerformance() {
+  console.log('Updating signal performance...');
+  
+  // Check performance of signals from 7, 14, 30 days ago
+  const today = new Date();
+  const periods = [7, 14, 30];
+  let updated = 0;
+  
+  for (const signal of signalHistory) {
+    // Skip if already evaluated for all periods
+    if (signal.evaluated30d) continue;
+    
+    const signalDate = new Date(signal.signalDate);
+    const daysOld = Math.floor((today - signalDate) / (1000 * 60 * 60 * 24));
+    
+    // Evaluate at 7, 14, 30 days
+    for (const days of periods) {
+      const key = `evaluated${days}d`;
+      
+      if (daysOld >= days && !signal[key]) {
+        try {
+          // Fetch current price
+          const data = await getStockData(signal.symbol);
+          if (data && data.length > 0) {
+            const latestPrice = data[data.length - 1].close;
+            const returnPct = ((latestPrice - signal.entryPrice) / signal.entryPrice) * 100;
+            
+            signal[`price${days}d`] = latestPrice;
+            signal[`return${days}d`] = returnPct;
+            signal[key] = true;
+            updated++;
+            
+            console.log(`  ${signal.symbol}: ${returnPct > 0 ? '+' : ''}${returnPct.toFixed(2)}% after ${days}d`);
+          }
+        } catch (error) {
+          console.error(`  Error evaluating ${signal.symbol}:`, error.message);
+        }
+        
+        // Rate limit
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    }
+  }
+  
+  if (updated > 0) {
+    saveData();
+    console.log(`✅ Updated ${updated} signal evaluations`);
+  } else {
+    console.log('✅ No signals to update');
+  }
+}
+
+function calculatePerformanceStats(days = 30) {
+  const cutoffDate = new Date();
+  cutoffDate.setDate(cutoffDate.getDate() - days);
+  const cutoff = cutoffDate.toISOString().split('T')[0];
+  
+  // Get signals from specified period
+  const recentSignals = signalHistory.filter(s => s.signalDate >= cutoff);
+  
+  if (recentSignals.length === 0) {
+    return null;
+  }
+  
+  // Calculate stats for different holding periods
+  const stats = {
+    totalSignals: recentSignals.length,
+    buySignals: recentSignals.filter(s => s.signalType === 'BUY').length,
+    potentialSignals: recentSignals.filter(s => s.signalType === 'POTENTIAL').length,
+    periods: {}
+  };
+  
+  // Stats for each period (7d, 14d, 30d)
+  for (const period of [7, 14, 30]) {
+    const key = `return${period}d`;
+    const evaluated = recentSignals.filter(s => s[key] !== undefined);
+    
+    if (evaluated.length > 0) {
+      const returns = evaluated.map(s => s[key]);
+      const profitable = returns.filter(r => r > 0).length;
+      const avgReturn = returns.reduce((a, b) => a + b, 0) / returns.length;
+      const maxReturn = Math.max(...returns);
+      const minReturn = Math.min(...returns);
+      
+      stats.periods[`${period}d`] = {
+        evaluated: evaluated.length,
+        profitable,
+        unprofitable: evaluated.length - profitable,
+        winRate: (profitable / evaluated.length * 100).toFixed(1),
+        avgReturn: avgReturn.toFixed(2),
+        maxReturn: maxReturn.toFixed(2),
+        minReturn: minReturn.toFixed(2)
+      };
+    }
+  }
+  
+  return stats;
+}
+
+function getStockPerformance(symbol, days = 30) {
+  const cutoffDate = new Date();
+  cutoffDate.setDate(cutoffDate.getDate() - days);
+  const cutoff = cutoffDate.toISOString().split('T')[0];
+  
+  const stockSignals = signalHistory.filter(s => 
+    s.symbol === symbol && s.signalDate >= cutoff
+  );
+  
+  if (stockSignals.length === 0) {
+    return null;
+  }
+  
+  const stats = {
+    symbol,
+    totalSignals: stockSignals.length,
+    signals: []
+  };
+  
+  for (const signal of stockSignals) {
+    const signalInfo = {
+      date: signal.signalDate,
+      type: signal.signalType,
+      entryPrice: signal.entryPrice,
+      returns: {}
+    };
+    
+    for (const period of [7, 14, 30]) {
+      const key = `return${period}d`;
+      if (signal[key] !== undefined) {
+        signalInfo.returns[`${period}d`] = {
+          return: signal[key],
+          price: signal[`price${period}d`]
+        };
+      }
+    }
+    
+    stats.signals.push(signalInfo);
+  }
+  
+  return stats;
+}
+
+function getTopPerformers(days = 30, limit = 10) {
+  const cutoffDate = new Date();
+  cutoffDate.setDate(cutoffDate.getDate() - days);
+  const cutoff = cutoffDate.toISOString().split('T')[0];
+  
+  // Group by symbol
+  const bySymbol = new Map();
+  
+  for (const signal of signalHistory) {
+    if (signal.signalDate >= cutoff && signal.return30d !== undefined) {
+      if (!bySymbol.has(signal.symbol)) {
+        bySymbol.set(signal.symbol, []);
+      }
+      bySymbol.get(signal.symbol).push(signal);
+    }
+  }
+  
+  // Calculate average return per symbol
+  const symbolStats = [];
+  
+  for (const [symbol, signals] of bySymbol) {
+    const returns = signals.map(s => s.return30d || 0);
+    const avgReturn = returns.reduce((a, b) => a + b, 0) / returns.length;
+    const profitable = returns.filter(r => r > 0).length;
+    
+    symbolStats.push({
+      symbol,
+      signalCount: signals.length,
+      avgReturn: avgReturn.toFixed(2),
+      winRate: (profitable / signals.length * 100).toFixed(1),
+      lastSignal: signals[signals.length - 1].signalDate
+    });
+  }
+  
+  // Sort by average return
+  symbolStats.sort((a, b) => parseFloat(b.avgReturn) - parseFloat(a.avgReturn));
+  
+  return symbolStats.slice(0, limit);
+}
+
+
 // FEATURE 1: Custom Sector Selection
 async function performAutoScan(sessionName) {
   if (!AUTO_SCAN_CONFIG.ENABLED || subscribers.size === 0) {
@@ -375,6 +629,20 @@ async function performAutoScan(sessionName) {
   });
   
   await Promise.all(sectorPromises);
+  
+  // Record all signals in history
+  for (const [sectorName, withSignals] of allSectorResults) {
+    for (const result of withSignals) {
+      if (result.signal && result.price) {
+        // Extract signal type from emoji
+        let signalType = 'POTENTIAL';
+        if (result.signal.includes('🟢')) {
+          signalType = 'BUY';
+        }
+        recordSignal(result.symbol, signalType, result.price);
+      }
+    }
+  }
   
   // Store for daily summary
   lastScanResults.set('time', new Date());
@@ -545,12 +813,18 @@ function setupAutoScans() {
     checkWatchlist();
   }, { timezone: CONFIG.TIMEZONE });
   
+  // Update signal performance (daily at 17:00 WIB - after market closes)
+  cron.schedule('0 17 * * 1-5', () => {
+    updateSignalPerformance();
+  }, { timezone: CONFIG.TIMEZONE });
+  
   console.log('✅ Auto-scan schedules set up:');
   console.log(`   • Daily Summary: ${AUTO_SCAN_CONFIG.SCHEDULE.DAILY_SUMMARY} WIB`);
   console.log(`   • Morning Scan: ${AUTO_SCAN_CONFIG.SCHEDULE.MORNING_SCAN} WIB`);
   console.log(`   • Afternoon Scan: ${AUTO_SCAN_CONFIG.SCHEDULE.AFTERNOON_SCAN} WIB`);
   console.log(`   • Evening Scan: ${AUTO_SCAN_CONFIG.SCHEDULE.EVENING_SCAN} WIB`);
   console.log(`   • Watchlist checks: Every hour during market hours`);
+  console.log(`   • Performance update: 17:00 WIB (daily)`);
 }
 
 // Admin check
@@ -558,10 +832,146 @@ function isAdmin(chatId) {
   return CONFIG.ADMIN_ID && chatId.toString() === CONFIG.ADMIN_ID.toString();
 }
 
+// Access control functions
+function hasAccess(chatId) {
+  // Admin always has access
+  if (isAdmin(chatId)) return true;
+  
+  // Check access mode
+  if (CONFIG.ACCESS_MODE === 'open') {
+    // Open mode - everyone has access except blocked
+    return !blockedUsers.has(chatId);
+  } else if (CONFIG.ACCESS_MODE === 'whitelist') {
+    // Whitelist mode - only allowed users
+    return allowedUsers.has(chatId) && !blockedUsers.has(chatId);
+  } else if (CONFIG.ACCESS_MODE === 'approval') {
+    // Approval mode - needs admin approval
+    return allowedUsers.has(chatId) && !blockedUsers.has(chatId);
+  }
+  
+  return false;
+}
+
+function checkAccess(msg, callback) {
+  const chatId = msg.chat.id;
+  
+  if (hasAccess(chatId)) {
+    callback();
+    return true;
+  }
+  
+  // User doesn't have access
+  if (blockedUsers.has(chatId)) {
+    bot.sendMessage(chatId, '🚫 You have been blocked from using this bot.');
+    return false;
+  }
+  
+  if (CONFIG.ACCESS_MODE === 'whitelist') {
+    bot.sendMessage(chatId, 
+      '🔒 *Access Restricted*\n\n' +
+      'This bot is private and requires authorization.\n\n' +
+      'Your Telegram ID: `' + chatId + '`\n\n' +
+      'Please contact the bot administrator to request access.',
+      { parse_mode: 'Markdown' }
+    );
+    return false;
+  }
+  
+  if (CONFIG.ACCESS_MODE === 'approval') {
+    if (pendingApprovals.has(chatId)) {
+      bot.sendMessage(chatId, 
+        '⏳ *Access Pending*\n\n' +
+        'Your access request is waiting for admin approval.\n\n' +
+        'Please wait for the administrator to approve your request.',
+        { parse_mode: 'Markdown' }
+      );
+    } else {
+      pendingApprovals.add(chatId);
+      saveData();
+      
+      bot.sendMessage(chatId,
+        '📝 *Access Request Submitted*\n\n' +
+        'Your request has been sent to the administrator.\n\n' +
+        'You will be notified once approved.',
+        { parse_mode: 'Markdown' }
+      );
+      
+      // Notify admin
+      if (CONFIG.ADMIN_ID) {
+        const user = msg.from;
+        const userName = user.username ? `@${user.username}` : user.first_name || 'Unknown';
+        bot.sendMessage(CONFIG.ADMIN_ID,
+          `🔔 *New Access Request*\n\n` +
+          `User: ${userName}\n` +
+          `Name: ${user.first_name} ${user.last_name || ''}\n` +
+          `ID: \`${chatId}\`\n\n` +
+          `Use /approve ${chatId} to grant access\n` +
+          `Use /deny ${chatId} to deny access`,
+          { parse_mode: 'Markdown' }
+        );
+      }
+    }
+    return false;
+  }
+  
+  return false;
+}
+
+// Access control check
+function hasAccess(chatId) {
+  // If whitelist is disabled, everyone has access
+  if (!CONFIG.WHITELIST_ENABLED) {
+    return true;
+  }
+  
+  // Admin always has access
+  if (isAdmin(chatId)) {
+    return true;
+  }
+  
+  // Check if user is in whitelist
+  return CONFIG.WHITELIST_USERS.includes(chatId.toString());
+}
+
+// Middleware to check access before processing commands
+function checkAccess(msg, callback) {
+  const chatId = msg.chat.id;
+  
+  if (!hasAccess(chatId)) {
+    bot.sendMessage(chatId, 
+      '🔒 *Access Restricted*\n\n' +
+      'This bot is private and requires authorization.\n\n' +
+      'Your Telegram ID: `' + chatId + '`\n\n' +
+      'Please contact the bot administrator to request access.',
+      { parse_mode: 'Markdown' }
+    );
+    
+    // Notify admin of access attempt
+    if (CONFIG.ADMIN_ID) {
+      bot.sendMessage(CONFIG.ADMIN_ID,
+        `⚠️ *Unauthorized Access Attempt*\n\n` +
+        `User ID: ${chatId}\n` +
+        `Username: @${msg.from.username || 'N/A'}\n` +
+        `Name: ${msg.from.first_name || ''} ${msg.from.last_name || ''}\n\n` +
+        `To add this user:\n` +
+        `Add \`${chatId}\` to WHITELIST_USERS`,
+        { parse_mode: 'Markdown' }
+      ).catch(() => {});
+    }
+    
+    return false;
+  }
+  
+  callback();
+  return true;
+}
+
 // Bot Commands
 bot.onText(/\/start/, (msg) => {
   const chatId = msg.chat.id;
-  const welcomeMessage = `
+  
+  if (!checkAccess(msg, () => {
+    const welcomeMessage = `
 🤖 *IDX Stock Screener Bot*
 
 Welcome! I can help you screen Indonesian stocks using Stochastic Oscillator (10,5,5).
@@ -570,6 +980,7 @@ Welcome! I can help you screen Indonesian stocks using Stochastic Oscillator (10
 ✨ Custom sector selection
 ✨ Personal watchlist
 ✨ Daily summary alerts
+✨ Historical performance tracking 📊
 
 *Available Commands:*
 /sectors - View all available sectors
@@ -588,13 +999,17 @@ Welcome! I can help you screen Indonesian stocks using Stochastic Oscillator (10
 /watch <SYMBOL> - Add stock to watchlist
 /unwatch <SYMBOL> - Remove from watchlist
 
-*📊 Summary:*
+*📊 Performance & Analysis:*
 /today - Today's top opportunities
+/performance - Bot's signal accuracy
+/backtest <SYMBOL> - Stock's signal history
+/topstocks - Best performing stocks
 
 /help - Show detailed help
-  `;
-  
-  bot.sendMessage(chatId, welcomeMessage, { parse_mode: 'Markdown' });
+    `;
+    
+    bot.sendMessage(chatId, welcomeMessage, { parse_mode: 'Markdown' });
+  })) return;
 });
 
 bot.onText(/\/help/, (msg) => {
@@ -619,8 +1034,11 @@ bot.onText(/\/help/, (msg) => {
 • /watch BBCA - Add BBCA to watchlist
 • /unwatch BBCA - Remove BBCA
 
-*Summary:*
+*Performance & Analysis:*
 • /today - Top 10 opportunities today
+• /performance - Signal accuracy (last 30 days)
+• /backtest BBCA - BBCA's signal history
+• /topstocks - Best performing stocks
 
 *Settings:*
 • K Period: ${CONFIG.STOCH_K_PERIOD}
@@ -635,6 +1053,7 @@ bot.onText(/\/help/, (msg) => {
 ☀️ 10:00 - Morning Scan
 🌤️ 13:00 - Afternoon Scan
 🌆 16:00 - Evening Scan
+🔄 17:00 - Performance Update
   `, { parse_mode: 'Markdown' });
 });
 
@@ -891,6 +1310,164 @@ bot.onText(/\/today/, async (msg) => {
   }
 });
 
+// Historical Performance Commands
+bot.onText(/\/performance/, (msg) => {
+  const chatId = msg.chat.id;
+  
+  if (!checkAccess(msg, () => {
+    const stats30 = calculatePerformanceStats(30);
+    
+    if (!stats30 || Object.keys(stats30.periods).length === 0) {
+      bot.sendMessage(chatId, 
+        `📊 *Historical Performance*\n\n` +
+        `Not enough data yet. The bot needs to run for at least 7 days to show performance statistics.\n\n` +
+        `Current signals tracked: ${signalHistory.length}`,
+        { parse_mode: 'Markdown' }
+      );
+      return;
+    }
+    
+    let message = `📊 *Signal Performance - Last 30 Days*\n\n`;
+    message += `📈 Total Signals: ${stats30.totalSignals}\n`;
+    message += `🟢 Buy Signals: ${stats30.buySignals}\n`;
+    message += `🟡 Potential Signals: ${stats30.potentialSignals}\n\n`;
+    
+    // Show stats for each period
+    for (const [period, data] of Object.entries(stats30.periods)) {
+      message += `*${period.toUpperCase()} Performance:*\n`;
+      message += `Evaluated: ${data.evaluated} signals\n`;
+      message += `✅ Profitable: ${data.profitable} (${data.winRate}%)\n`;
+      message += `❌ Unprofitable: ${data.unprofitable}\n`;
+      message += `📊 Avg Return: ${data.avgReturn > 0 ? '+' : ''}${data.avgReturn}%\n`;
+      message += `📈 Best: +${data.maxReturn}%\n`;
+      message += `📉 Worst: ${data.minReturn}%\n\n`;
+    }
+    
+    message += `💡 *Tip:* Use /backtest BBCA to see performance for a specific stock`;
+    
+    bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
+  })) return;
+});
+
+bot.onText(/\/backtest (.+)/, async (msg, match) => {
+  const chatId = msg.chat.id;
+  const symbol = match[1].toUpperCase().trim();
+  
+  if (!checkAccess(msg, async () => {
+    const processingMsg = await bot.sendMessage(chatId, `🔍 Analyzing ${symbol} historical signals...`);
+    
+    try {
+      const stockPerf = getStockPerformance(symbol, 90);
+      
+      if (!stockPerf) {
+        bot.editMessageText(
+          `📊 *${symbol} Backtest*\n\n` +
+          `No historical signals found for this stock in the last 90 days.\n\n` +
+          `The bot will start tracking signals from now on.`,
+          {
+            chat_id: chatId,
+            message_id: processingMsg.message_id,
+            parse_mode: 'Markdown'
+          }
+        );
+        return;
+      }
+      
+      let message = `📊 *${symbol} Historical Performance*\n\n`;
+      message += `Total Signals (90 days): ${stockPerf.totalSignals}\n\n`;
+      
+      // Show each signal
+      stockPerf.signals.forEach((sig, index) => {
+        message += `${index + 1}. ${sig.date} - ${sig.type}\n`;
+        message += `   Entry: Rp ${sig.entryPrice.toFixed(0)}\n`;
+        
+        if (Object.keys(sig.returns).length > 0) {
+          for (const [period, data] of Object.entries(sig.returns)) {
+            const returnPct = data.return;
+            const emoji = returnPct > 0 ? '✅' : '❌';
+            message += `   ${emoji} ${period}: ${returnPct > 0 ? '+' : ''}${returnPct.toFixed(2)}% (Rp ${data.price.toFixed(0)})\n`;
+          }
+        } else {
+          message += `   ⏳ Still tracking...\n`;
+        }
+        message += `\n`;
+      });
+      
+      // Calculate averages if we have returns
+      const allReturns7d = stockPerf.signals
+        .filter(s => s.returns['7d'])
+        .map(s => s.returns['7d'].return);
+      
+      const allReturns30d = stockPerf.signals
+        .filter(s => s.returns['30d'])
+        .map(s => s.returns['30d'].return);
+      
+      if (allReturns7d.length > 0 || allReturns30d.length > 0) {
+        message += `📈 *Summary:*\n`;
+        
+        if (allReturns7d.length > 0) {
+          const avg7d = allReturns7d.reduce((a, b) => a + b, 0) / allReturns7d.length;
+          const profitable7d = allReturns7d.filter(r => r > 0).length;
+          message += `7d: ${avg7d > 0 ? '+' : ''}${avg7d.toFixed(2)}% avg (${profitable7d}/${allReturns7d.length} profitable)\n`;
+        }
+        
+        if (allReturns30d.length > 0) {
+          const avg30d = allReturns30d.reduce((a, b) => a + b, 0) / allReturns30d.length;
+          const profitable30d = allReturns30d.filter(r => r > 0).length;
+          message += `30d: ${avg30d > 0 ? '+' : ''}${avg30d.toFixed(2)}% avg (${profitable30d}/${allReturns30d.length} profitable)\n`;
+        }
+      }
+      
+      bot.editMessageText(message, {
+        chat_id: chatId,
+        message_id: processingMsg.message_id,
+        parse_mode: 'Markdown'
+      });
+    } catch (error) {
+      bot.editMessageText(`❌ Error: ${error.message}`, {
+        chat_id: chatId,
+        message_id: processingMsg.message_id
+      });
+    }
+  })) return;
+});
+
+bot.onText(/\/topstocks/, (msg) => {
+  const chatId = msg.chat.id;
+  
+  if (!checkAccess(msg, () => {
+    const topPerformers = getTopPerformers(30, 10);
+    
+    if (topPerformers.length === 0) {
+      bot.sendMessage(chatId,
+        `📊 *Top Performing Stocks*\n\n` +
+        `Not enough data yet. The bot needs at least 30 days of data to show top performers.\n\n` +
+        `Check back in a few weeks!`,
+        { parse_mode: 'Markdown' }
+      );
+      return;
+    }
+    
+    let message = `🏆 *Top 10 Stocks - Last 30 Days*\n\n`;
+    message += `Based on average returns from signals\n\n`;
+    
+    topPerformers.forEach((stock, index) => {
+      const returnNum = parseFloat(stock.avgReturn);
+      const emoji = returnNum > 0 ? '📈' : '📉';
+      
+      message += `${index + 1}. ${emoji} *${stock.symbol}*\n`;
+      message += `   Avg Return: ${returnNum > 0 ? '+' : ''}${stock.avgReturn}%\n`;
+      message += `   Win Rate: ${stock.winRate}%\n`;
+      message += `   Signals: ${stock.signalCount}\n`;
+      message += `   Last: ${stock.lastSignal}\n\n`;
+    });
+    
+    message += `💡 Use /backtest SYMBOL to see detailed history`;
+    
+    bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
+  })) return;
+});
+
 // FEATURE 4: Admin Commands
 bot.onText(/\/stats/, (msg) => {
   const chatId = msg.chat.id;
@@ -918,12 +1495,19 @@ bot.onText(/\/stats/, (msg) => {
   message += `👥 Total Users: ${userSectors.size}\n`;
   message += `🔔 Subscribers: ${subscribers.size}\n`;
   message += `👀 Total Watchlist Stocks: ${totalWatchedStocks}\n`;
-  message += `📂 Avg Sectors/User: ${(Array.from(userSectors.values()).reduce((sum, sectors) => sum + sectors.length, 0) / userSectors.size || 0).toFixed(1)}\n\n`;
+  message += `📂 Avg Sectors/User: ${(Array.from(userSectors.values()).reduce((sum, sectors) => sum + sectors.length, 0) / userSectors.size || 0).toFixed(1)}\n`;
+  message += `📊 Signal History: ${signalHistory.length} records\n\n`;
   
   message += `*Top 5 Monitored Sectors:*\n`;
   topSectors.forEach(([sector, count], index) => {
     message += `${index + 1}. ${sector}: ${count} users\n`;
   });
+  
+  if (subscribers.size > 0) {
+    message += `\n*Subscriber Management:*\n`;
+    message += `/unsubscribeall - Unsubscribe all users\n`;
+    message += `/unsubscribeall_silent - Unsubscribe without notification\n`;
+  }
   
   bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
 });
@@ -958,6 +1542,384 @@ bot.onText(/\/broadcast (.+)/, async (msg, match) => {
     chat_id: chatId,
     message_id: statusMsg.message_id
   });
+});
+
+bot.onText(/\/unsubscribeall/, async (msg) => {
+  const chatId = msg.chat.id;
+  
+  if (!isAdmin(chatId)) {
+    bot.sendMessage(chatId, '❌ Admin only command');
+    return;
+  }
+  
+  const subscriberCount = subscribers.size;
+  
+  if (subscriberCount === 0) {
+    bot.sendMessage(chatId, '✅ No subscribers to remove.');
+    return;
+  }
+  
+  // Ask for confirmation
+  const confirmMsg = await bot.sendMessage(chatId,
+    `⚠️ *Confirm Unsubscribe All*\n\n` +
+    `This will unsubscribe *${subscriberCount} users* from auto-scan alerts.\n\n` +
+    `They will need to /subscribe again to receive alerts.\n\n` +
+    `Type /confirmunsubscribeall to proceed\n` +
+    `Type /cancel to cancel`,
+    { parse_mode: 'Markdown' }
+  );
+});
+
+bot.onText(/\/confirmunsubscribeall/, async (msg) => {
+  const chatId = msg.chat.id;
+  
+  if (!isAdmin(chatId)) {
+    bot.sendMessage(chatId, '❌ Admin only command');
+    return;
+  }
+  
+  const subscriberCount = subscribers.size;
+  
+  if (subscriberCount === 0) {
+    bot.sendMessage(chatId, '✅ No subscribers to remove.');
+    return;
+  }
+  
+  const statusMsg = await bot.sendMessage(chatId, `🔄 Unsubscribing ${subscriberCount} users...`);
+  
+  // Store subscriber list for notification
+  const subscriberList = Array.from(subscribers);
+  let notified = 0;
+  let failed = 0;
+  
+  // Clear all subscribers
+  subscribers.clear();
+  saveData();
+  
+  // Notify each user (optional - can be disabled if you don't want to notify)
+  for (const userId of subscriberList) {
+    try {
+      await bot.sendMessage(userId,
+        `📢 *Subscription Update*\n\n` +
+        `You have been unsubscribed from auto-scan alerts by the administrator.\n\n` +
+        `Use /subscribe to re-enable alerts if you wish to continue.`,
+        { parse_mode: 'Markdown' }
+      );
+      notified++;
+    } catch (error) {
+      failed++;
+      console.error(`Failed to notify ${userId}:`, error.message);
+    }
+    
+    // Rate limit protection
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  
+  bot.editMessageText(
+    `✅ *Unsubscribe Complete!*\n\n` +
+    `Unsubscribed: ${subscriberCount} users\n` +
+    `Notified: ${notified}\n` +
+    `Failed to notify: ${failed}\n\n` +
+    `All users have been removed from auto-scan alerts.`,
+    {
+      chat_id: chatId,
+      message_id: statusMsg.message_id,
+      parse_mode: 'Markdown'
+    }
+  );
+  
+  console.log(`Admin unsubscribed all ${subscriberCount} users`);
+});
+
+bot.onText(/\/unsubscribeall_silent/, async (msg) => {
+  const chatId = msg.chat.id;
+  
+  if (!isAdmin(chatId)) {
+    bot.sendMessage(chatId, '❌ Admin only command');
+    return;
+  }
+  
+  const subscriberCount = subscribers.size;
+  
+  if (subscriberCount === 0) {
+    bot.sendMessage(chatId, '✅ No subscribers to remove.');
+    return;
+  }
+  
+  // Ask for confirmation
+  await bot.sendMessage(chatId,
+    `⚠️ *Confirm Silent Unsubscribe All*\n\n` +
+    `This will unsubscribe *${subscriberCount} users* WITHOUT notifying them.\n\n` +
+    `Users will simply stop receiving alerts.\n\n` +
+    `Type /confirmsilent to proceed\n` +
+    `Type /cancel to cancel`,
+    { parse_mode: 'Markdown' }
+  );
+});
+
+bot.onText(/\/confirmsilent/, async (msg) => {
+  const chatId = msg.chat.id;
+  
+  if (!isAdmin(chatId)) {
+    bot.sendMessage(chatId, '❌ Admin only command');
+    return;
+  }
+  
+  const subscriberCount = subscribers.size;
+  
+  if (subscriberCount === 0) {
+    bot.sendMessage(chatId, '✅ No subscribers to remove.');
+    return;
+  }
+  
+  // Clear all subscribers silently
+  subscribers.clear();
+  saveData();
+  
+  bot.sendMessage(chatId,
+    `✅ *Silent Unsubscribe Complete!*\n\n` +
+    `Removed ${subscriberCount} subscribers without notification.\n\n` +
+    `They will no longer receive auto-scan alerts.`,
+    { parse_mode: 'Markdown' }
+  );
+  
+  console.log(`Admin silently unsubscribed all ${subscriberCount} users`);
+});
+
+bot.onText(/\/cancel/, (msg) => {
+  const chatId = msg.chat.id;
+  
+  if (!isAdmin(chatId)) {
+    return;
+  }
+  
+  bot.sendMessage(chatId, '✅ Operation cancelled.');
+});
+
+// Access Control Commands (Admin Only)
+bot.onText(/\/approve (.+)/, (msg, match) => {
+  const chatId = msg.chat.id;
+  
+  if (!isAdmin(chatId)) {
+    bot.sendMessage(chatId, '❌ Admin only command');
+    return;
+  }
+  
+  const userId = parseInt(match[1]);
+  
+  if (isNaN(userId)) {
+    bot.sendMessage(chatId, '❌ Invalid user ID');
+    return;
+  }
+  
+  allowedUsers.add(userId);
+  pendingApprovals.delete(userId);
+  blockedUsers.delete(userId);
+  saveData();
+  
+  bot.sendMessage(chatId, `✅ User ${userId} has been approved and can now use the bot.`);
+  
+  // Notify the user
+  bot.sendMessage(userId, 
+    '✅ *Access Approved!*\n\n' +
+    'You can now use the bot.\n\n' +
+    'Type /start to begin.',
+    { parse_mode: 'Markdown' }
+  ).catch(() => {});
+});
+
+bot.onText(/\/deny (.+)/, (msg, match) => {
+  const chatId = msg.chat.id;
+  
+  if (!isAdmin(chatId)) {
+    bot.sendMessage(chatId, '❌ Admin only command');
+    return;
+  }
+  
+  const userId = parseInt(match[1]);
+  
+  if (isNaN(userId)) {
+    bot.sendMessage(chatId, '❌ Invalid user ID');
+    return;
+  }
+  
+  pendingApprovals.delete(userId);
+  allowedUsers.delete(userId);
+  saveData();
+  
+  bot.sendMessage(chatId, `❌ User ${userId}'s access request has been denied.`);
+  
+  // Notify the user
+  bot.sendMessage(userId,
+    '❌ *Access Denied*\n\n' +
+    'Your access request has been denied by the administrator.',
+    { parse_mode: 'Markdown' }
+  ).catch(() => {});
+});
+
+bot.onText(/\/block (.+)/, (msg, match) => {
+  const chatId = msg.chat.id;
+  
+  if (!isAdmin(chatId)) {
+    bot.sendMessage(chatId, '❌ Admin only command');
+    return;
+  }
+  
+  const userId = parseInt(match[1]);
+  
+  if (isNaN(userId)) {
+    bot.sendMessage(chatId, '❌ Invalid user ID');
+    return;
+  }
+  
+  blockedUsers.add(userId);
+  allowedUsers.delete(userId);
+  subscribers.delete(userId);
+  pendingApprovals.delete(userId);
+  saveData();
+  
+  bot.sendMessage(chatId, `🚫 User ${userId} has been blocked.`);
+  
+  // Notify the user
+  bot.sendMessage(userId,
+    '🚫 *Access Blocked*\n\n' +
+    'You have been blocked from using this bot.',
+    { parse_mode: 'Markdown' }
+  ).catch(() => {});
+});
+
+bot.onText(/\/unblock (.+)/, (msg, match) => {
+  const chatId = msg.chat.id;
+  
+  if (!isAdmin(chatId)) {
+    bot.sendMessage(chatId, '❌ Admin only command');
+    return;
+  }
+  
+  const userId = parseInt(match[1]);
+  
+  if (isNaN(userId)) {
+    bot.sendMessage(chatId, '❌ Invalid user ID');
+    return;
+  }
+  
+  blockedUsers.delete(userId);
+  
+  if (CONFIG.ACCESS_MODE === 'open') {
+    allowedUsers.add(userId);
+  }
+  
+  saveData();
+  
+  bot.sendMessage(chatId, `✅ User ${userId} has been unblocked.`);
+  
+  // Notify the user
+  bot.sendMessage(userId,
+    '✅ *Access Restored*\n\n' +
+    'You have been unblocked and can now use the bot.\n\n' +
+    'Type /start to begin.',
+    { parse_mode: 'Markdown' }
+  ).catch(() => {});
+});
+
+bot.onText(/\/adduser (.+)/, (msg, match) => {
+  const chatId = msg.chat.id;
+  
+  if (!isAdmin(chatId)) {
+    bot.sendMessage(chatId, '❌ Admin only command');
+    return;
+  }
+  
+  const userId = parseInt(match[1]);
+  
+  if (isNaN(userId)) {
+    bot.sendMessage(chatId, '❌ Invalid user ID');
+    return;
+  }
+  
+  allowedUsers.add(userId);
+  blockedUsers.delete(userId);
+  saveData();
+  
+  bot.sendMessage(chatId, `✅ User ${userId} has been added to whitelist.`);
+});
+
+bot.onText(/\/removeuser (.+)/, (msg, match) => {
+  const chatId = msg.chat.id;
+  
+  if (!isAdmin(chatId)) {
+    bot.sendMessage(chatId, '❌ Admin only command');
+    return;
+  }
+  
+  const userId = parseInt(match[1]);
+  
+  if (isNaN(userId)) {
+    bot.sendMessage(chatId, '❌ Invalid user ID');
+    return;
+  }
+  
+  allowedUsers.delete(userId);
+  subscribers.delete(userId);
+  saveData();
+  
+  bot.sendMessage(chatId, `✅ User ${userId} has been removed from whitelist.`);
+});
+
+bot.onText(/\/pending/, (msg) => {
+  const chatId = msg.chat.id;
+  
+  if (!isAdmin(chatId)) {
+    bot.sendMessage(chatId, '❌ Admin only command');
+    return;
+  }
+  
+  if (pendingApprovals.size === 0) {
+    bot.sendMessage(chatId, '✅ No pending access requests.');
+    return;
+  }
+  
+  let message = `⏳ *Pending Access Requests (${pendingApprovals.size})*\n\n`;
+  
+  Array.from(pendingApprovals).forEach((userId, index) => {
+    message += `${index + 1}. User ID: \`${userId}\`\n`;
+    message += `   /approve ${userId}\n`;
+    message += `   /deny ${userId}\n\n`;
+  });
+  
+  bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
+});
+
+bot.onText(/\/accessmode/, (msg) => {
+  const chatId = msg.chat.id;
+  
+  if (!isAdmin(chatId)) {
+    bot.sendMessage(chatId, '❌ Admin only command');
+    return;
+  }
+  
+  let message = `🔐 *Access Control Status*\n\n`;
+  message += `Mode: *${CONFIG.ACCESS_MODE.toUpperCase()}*\n\n`;
+  
+  if (CONFIG.ACCESS_MODE === 'open') {
+    message += `🟢 Open Mode - Anyone can use (except blocked)\n`;
+  } else if (CONFIG.ACCESS_MODE === 'whitelist') {
+    message += `🟡 Whitelist Mode - Only whitelisted users\n`;
+  } else if (CONFIG.ACCESS_MODE === 'approval') {
+    message += `🔴 Approval Mode - Requires admin approval\n`;
+  }
+  
+  message += `\n📊 *Statistics:*\n`;
+  message += `Allowed Users: ${allowedUsers.size}\n`;
+  message += `Pending Approvals: ${pendingApprovals.size}\n`;
+  message += `Blocked Users: ${blockedUsers.size}\n`;
+  
+  message += `\n*Change mode in Railway:*\n`;
+  message += `ACCESS_MODE=open\n`;
+  message += `ACCESS_MODE=whitelist\n`;
+  message += `ACCESS_MODE=approval\n`;
+  
+  bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
 });
 
 // Existing commands (sectors, screen, stock, etc.)
