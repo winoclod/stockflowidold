@@ -159,63 +159,9 @@ const IDX_SECTORS = {
   'Electronic Technology': ['MTDL', 'PTSN', 'AXIO', 'IKBI', 'LPIN', 'ZYRX', 'RCCC']
 };
 
-// Initialize bot with webhook
+// Initialize bot
 const token = process.env.TELEGRAM_BOT_TOKEN;
-const PORT = process.env.PORT || 3000;
-const WEBHOOK_URL = process.env.RAILWAY_PUBLIC_DOMAIN 
-  ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
-  : process.env.WEBHOOK_URL;
-
-// Use polling for local development, webhook for production
-const USE_WEBHOOK = process.env.RAILWAY_ENVIRONMENT === 'production' || process.env.USE_WEBHOOK === 'true';
-
-let bot;
-
-if (USE_WEBHOOK && WEBHOOK_URL) {
-  console.log('🌐 Starting in WEBHOOK mode');
-  bot = new TelegramBot(token, { webHook: true });
-  
-  // Set webhook
-  const webhookPath = `/bot${token}`;
-  bot.setWebHook(`${WEBHOOK_URL}${webhookPath}`)
-    .then(() => {
-      console.log(`✅ Webhook set to: ${WEBHOOK_URL}${webhookPath}`);
-    })
-    .catch(err => {
-      console.error('❌ Failed to set webhook:', err.message);
-    });
-  
-  // Create express server for webhook
-  const express = require('express');
-  const bodyParser = require('body-parser');
-  const app = express();
-  
-  app.use(bodyParser.json());
-  
-  // Health check endpoint
-  app.get('/', (req, res) => {
-    res.json({
-      status: 'running',
-      mode: 'webhook',
-      bot: 'IDX Stock Screener Enhanced',
-      version: '2.0.0'
-    });
-  });
-  
-  // Webhook endpoint
-  app.post(webhookPath, (req, res) => {
-    bot.processUpdate(req.body);
-    res.sendStatus(200);
-  });
-  
-  // Start server
-  app.listen(PORT, () => {
-    console.log(`🚀 Webhook server listening on port ${PORT}`);
-  });
-} else {
-  console.log('📡 Starting in POLLING mode (local development)');
-  bot = new TelegramBot(token, { polling: true });
-}
+const bot = new TelegramBot(token, { polling: true });
 
 // Helper Functions
 function calculateStochastic(data) {
@@ -906,12 +852,6 @@ function hasAccess(chatId) {
   return false;
 }
 
-// Helper function to escape markdown special characters
-function escapeMarkdown(text) {
-  if (!text) return text;
-  return text.toString().replace(/[_*[\]()~`>#+=|{}.!-]/g, '\\$&');
-}
-
 function checkAccess(msg, callback) {
   const chatId = msg.chat.id;
   
@@ -961,13 +901,14 @@ function checkAccess(msg, callback) {
         const user = msg.from;
         const userName = user.username ? `@${user.username}` : user.first_name || 'Unknown';
         bot.sendMessage(CONFIG.ADMIN_ID,
-          `🔔 New Access Request\n\n` +
+          `🔔 *New Access Request*\n\n` +
           `User: ${userName}\n` +
           `Name: ${user.first_name} ${user.last_name || ''}\n` +
-          `ID: ${chatId}\n\n` +
+          `ID: \`${chatId}\`\n\n` +
           `Use /approve ${chatId} to grant access\n` +
-          `Use /deny ${chatId} to deny access`
-        ).catch(err => console.error('Failed to notify admin:', err.message));
+          `Use /deny ${chatId} to deny access`,
+          { parse_mode: 'Markdown' }
+        );
       }
     }
     return false;
@@ -1008,13 +949,14 @@ function checkAccess(msg, callback) {
     // Notify admin of access attempt
     if (CONFIG.ADMIN_ID) {
       bot.sendMessage(CONFIG.ADMIN_ID,
-        `⚠️ Unauthorized Access Attempt\n\n` +
+        `⚠️ *Unauthorized Access Attempt*\n\n` +
         `User ID: ${chatId}\n` +
         `Username: @${msg.from.username || 'N/A'}\n` +
         `Name: ${msg.from.first_name || ''} ${msg.from.last_name || ''}\n\n` +
         `To add this user:\n` +
-        `Add ${chatId} to WHITELIST_USERS`
-      ).catch(err => console.error('Failed to notify admin:', err.message));
+        `Add \`${chatId}\` to WHITELIST_USERS`,
+        { parse_mode: 'Markdown' }
+      ).catch(() => {});
     }
     
     return false;
@@ -1070,36 +1012,6 @@ Welcome! I can help you screen Indonesian stocks using Stochastic Oscillator (10
   })) return;
 });
 
-// Debug command - helps users find their Telegram ID
-bot.onText(/\/myid/, (msg) => {
-  const chatId = msg.chat.id;
-  const user = msg.from;
-  
-  let message = `🆔 *Your Telegram Information*\n\n`;
-  message += `ID: \`${chatId}\`\n`;
-  message += `First Name: ${user.first_name || 'N/A'}\n`;
-  if (user.last_name) message += `Last Name: ${user.last_name}\n`;
-  if (user.username) message += `Username: @${user.username}\n`;
-  message += `\n`;
-  
-  // Check if admin
-  if (CONFIG.ADMIN_ID) {
-    if (isAdmin(chatId)) {
-      message += `✅ You are the bot administrator\n`;
-    } else {
-      message += `⚠️ You are NOT the administrator\n`;
-      message += `Admin ID is set to: \`${CONFIG.ADMIN_ID}\`\n`;
-      message += `Your ID is: \`${chatId}\`\n\n`;
-      message += `To become admin, set ADMIN_TELEGRAM_ID=${chatId} in Railway\n`;
-    }
-  } else {
-    message += `⚠️ No admin configured\n`;
-    message += `Set ADMIN_TELEGRAM_ID=${chatId} in Railway to become admin\n`;
-  }
-  
-  bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
-});
-
 bot.onText(/\/help/, (msg) => {
   const chatId = msg.chat.id;
   bot.sendMessage(chatId, `
@@ -1128,9 +1040,6 @@ bot.onText(/\/help/, (msg) => {
 • /backtest BBCA - BBCA's signal history
 • /topstocks - Best performing stocks
 
-*Debug:*
-• /myid - Get your Telegram ID (for admin setup)
-
 *Settings:*
 • K Period: ${CONFIG.STOCH_K_PERIOD}
 • Oversold: ${CONFIG.OVERSOLD_LEVEL}
@@ -1150,78 +1059,49 @@ bot.onText(/\/help/, (msg) => {
 
 bot.onText(/\/subscribe/, (msg) => {
   const chatId = msg.chat.id;
-  console.log(`[SUBSCRIBE] Command received from chatId: ${chatId}`);
   
-  if (!checkAccess(msg, () => {
-    try {
-      console.log(`[SUBSCRIBE] Access granted for chatId: ${chatId}`);
-      
-      if (subscribers.has(chatId)) {
-        console.log(`[SUBSCRIBE] User already subscribed: ${chatId}`);
-        bot.sendMessage(chatId, '✅ You are already subscribed to auto-scan alerts!');
-      } else {
-        console.log(`[SUBSCRIBE] Adding new subscriber: ${chatId}`);
-        subscribers.add(chatId);
-        
-        // Set default sectors if user doesn't have any
-        if (!userSectors.has(chatId)) {
-          console.log(`[SUBSCRIBE] Setting default sectors for: ${chatId}`);
-          userSectors.set(chatId, AUTO_SCAN_CONFIG.DEFAULT_SECTORS);
-        }
-        
-        console.log(`[SUBSCRIBE] Saving data...`);
-        saveData();
-        console.log(`[SUBSCRIBE] Data saved successfully`);
-        
-        const userSelectedSectors = getUserSectors(chatId);
-        console.log(`[SUBSCRIBE] User has ${userSelectedSectors.length} sectors`);
-        
-        const message = '🔔 Subscribed to Auto-Scan Alerts!\n\n' +
-          'You will receive alerts at:\n' +
-          '☀️ 08:00 WIB - Daily Summary\n' +
-          '☀️ 10:00 WIB - Morning Scan\n' +
-          '🌤️ 13:00 WIB - Afternoon Scan\n' +
-          '🌆 16:00 WIB - Evening Scan\n\n' +
-          `Your monitored sectors: ${userSelectedSectors.length}\n` +
-          userSelectedSectors.map(s => '• ' + s).join('\n') + '\n\n' +
-          'Use /mysectors to customize\n' +
-          'Use /unsubscribe to stop alerts';
-        
-        console.log(`[SUBSCRIBE] Sending message to ${chatId}, length: ${message.length} chars`);
-        
-        bot.sendMessage(chatId, message)
-          .then(() => {
-            console.log(`[SUBSCRIBE] ✅ Message sent successfully to ${chatId}`);
-          })
-          .catch(err => {
-            console.error(`[SUBSCRIBE] ❌ Error sending message to ${chatId}:`, err.message);
-            bot.sendMessage(chatId, '✅ Subscribed! Use /mysectors to view your sectors.');
-          });
-      }
-      
-      console.log(`[SUBSCRIBE] Command completed for ${chatId}`);
-    } catch (error) {
-      console.error(`[SUBSCRIBE] ❌ Exception in subscribe command:`, error);
-      bot.sendMessage(chatId, '❌ Error processing subscription. Please try again.');
+  if (subscribers.has(chatId)) {
+    bot.sendMessage(chatId, '✅ You are already subscribed to auto-scan alerts!');
+  } else {
+    subscribers.add(chatId);
+    
+    // Set default sectors if user doesn't have any
+    if (!userSectors.has(chatId)) {
+      userSectors.set(chatId, AUTO_SCAN_CONFIG.DEFAULT_SECTORS);
     }
-  })) {
-    console.log(`[SUBSCRIBE] Access denied for chatId: ${chatId}`);
-    return;
+    
+    saveData();
+    
+    const userSelectedSectors = getUserSectors(chatId);
+    
+    bot.sendMessage(chatId, `
+🔔 *Subscribed to Auto-Scan Alerts!*
+
+You will receive alerts at:
+☀️ 08:00 WIB - Daily Summary
+☀️ 10:00 WIB - Morning Scan
+🌤️ 13:00 WIB - Afternoon Scan
+🌆 16:00 WIB - Evening Scan
+
+*Your monitored sectors (${userSelectedSectors.length}):*
+${userSelectedSectors.map(s => `• ${s}`).join('\n')}
+
+Use /mysectors to customize
+Use /unsubscribe to stop alerts
+    `, { parse_mode: 'Markdown' });
   }
 });
 
 bot.onText(/\/unsubscribe/, (msg) => {
   const chatId = msg.chat.id;
   
-  if (!checkAccess(msg, () => {
-    if (subscribers.has(chatId)) {
-      subscribers.delete(chatId);
-      saveData();
-      bot.sendMessage(chatId, '❌ You have been unsubscribed from auto-scan alerts.\n\nUse /subscribe to re-enable.');
-    } else {
-      bot.sendMessage(chatId, 'You are not currently subscribed to alerts.\n\nUse /subscribe to enable alerts.');
-    }
-  })) return;
+  if (subscribers.has(chatId)) {
+    subscribers.delete(chatId);
+    saveData();
+    bot.sendMessage(chatId, '❌ You have been unsubscribed from auto-scan alerts.\n\nUse /subscribe to re-enable.');
+  } else {
+    bot.sendMessage(chatId, 'You are not currently subscribed to alerts.\n\nUse /subscribe to enable alerts.');
+  }
 });
 
 // FEATURE 1: Custom Sectors Commands
@@ -1597,83 +1477,39 @@ bot.onText(/\/stats/, (msg) => {
     return;
   }
   
-  try {
-    let totalWatchedStocks = 0;
-    watchlist.forEach(stocks => totalWatchedStocks += stocks.length);
-    
-    let sectorDistribution = {};
-    userSectors.forEach(sectors => {
-      sectors.forEach(s => {
-        sectorDistribution[s] = (sectorDistribution[s] || 0) + 1;
-      });
+  let totalWatchedStocks = 0;
+  watchlist.forEach(stocks => totalWatchedStocks += stocks.length);
+  
+  let sectorDistribution = {};
+  userSectors.forEach(sectors => {
+    sectors.forEach(s => {
+      sectorDistribution[s] = (sectorDistribution[s] || 0) + 1;
     });
-    
-    const topSectors = Object.entries(sectorDistribution)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5);
-    
-    let message = `📊 *Bot Statistics*\n\n`;
-    message += `👥 Total Users: ${userSectors.size}\n`;
-    message += `🔔 Subscribers: ${subscribers.size}\n`;
-    message += `👀 Total Watchlist Stocks: ${totalWatchedStocks}\n`;
-    
-    // Calculate average sectors per user (safe division)
-    const avgSectors = userSectors.size > 0 
-      ? (Array.from(userSectors.values()).reduce((sum, sectors) => sum + sectors.length, 0) / userSectors.size).toFixed(1)
-      : '0.0';
-    message += `📂 Avg Sectors/User: ${avgSectors}\n`;
-    message += `📊 Signal History: ${signalHistory.length} records\n\n`;
-    
-    if (topSectors.length > 0) {
-      message += `*Top 5 Monitored Sectors:*\n`;
-      topSectors.forEach(([sector, count], index) => {
-        message += `${index + 1}. ${sector}: ${count} users\n`;
-      });
-    } else {
-      message += `*No sector data yet*\n`;
-    }
-    
-    if (subscribers.size > 0) {
-      message += `\n*Subscriber Management:*\n`;
-      message += `/unsubscribeall - Unsubscribe all users\n`;
-      message += `/unsubscribeall_silent - Unsubscribe without notification\n`;
-    }
-    
-    bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
-  } catch (error) {
-    console.error('Error in /stats command:', error);
-    bot.sendMessage(chatId, `❌ Error generating statistics: ${error.message}`);
-  }
-});
-
-// Simple test command for debugging stats issues
-bot.onText(/\/teststats/, (msg) => {
-  const chatId = msg.chat.id;
+  });
   
-  if (!isAdmin(chatId)) {
-    bot.sendMessage(chatId, '❌ Admin only command');
-    return;
+  const topSectors = Object.entries(sectorDistribution)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5);
+  
+  let message = `📊 *Bot Statistics*\n\n`;
+  message += `👥 Total Users: ${userSectors.size}\n`;
+  message += `🔔 Subscribers: ${subscribers.size}\n`;
+  message += `👀 Total Watchlist Stocks: ${totalWatchedStocks}\n`;
+  message += `📂 Avg Sectors/User: ${(Array.from(userSectors.values()).reduce((sum, sectors) => sum + sectors.length, 0) / userSectors.size || 0).toFixed(1)}\n`;
+  message += `📊 Signal History: ${signalHistory.length} records\n\n`;
+  
+  message += `*Top 5 Monitored Sectors:*\n`;
+  topSectors.forEach(([sector, count], index) => {
+    message += `${index + 1}. ${sector}: ${count} users\n`;
+  });
+  
+  if (subscribers.size > 0) {
+    message += `\n*Subscriber Management:*\n`;
+    message += `/unsubscribeall - Unsubscribe all users\n`;
+    message += `/unsubscribeall_silent - Unsubscribe without notification\n`;
   }
   
-  try {
-    // Simple version without markdown or complex formatting
-    let message = 'Test Stats:\n\n';
-    message += `Users: ${userSectors.size}\n`;
-    message += `Subscribers: ${subscribers.size}\n`;
-    message += `Watchlist: ${watchlist.size}\n`;
-    message += `Signals: ${signalHistory.length}\n`;
-    message += `Allowed: ${allowedUsers.size}\n`;
-    message += `Pending: ${pendingApprovals.size}\n`;
-    message += `Blocked: ${blockedUsers.size}\n\n`;
-    message += 'If you see this, basic stats work!\n';
-    message += 'Issue might be with Markdown formatting in /stats';
-    
-    bot.sendMessage(chatId, message);
-    console.log('✅ /teststats executed successfully for admin:', chatId);
-  } catch (error) {
-    bot.sendMessage(chatId, `Error in teststats: ${error.message}`);
-    console.error('Error in /teststats:', error);
-  }
+  bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
 });
 
 bot.onText(/\/broadcast (.+)/, async (msg, match) => {
