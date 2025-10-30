@@ -1,11 +1,11 @@
 {
-  "name": "idx-stock-screener-bot",
-  "version": "1.0.0",
-  "description": "Telegram bot for screening Indonesian stocks using Stochastic Oscillator",
-  "main": "bot.js",
+  "name": "idx-stock-screener-bot-enhanced",
+  "version": "2.0.0",
+  "description": "Enhanced Telegram bot for screening Indonesian stocks with Stochastic Oscillator, auto-scan, historical performance tracking, and admin controls",
+  "main": "bot-enhanced.js",
   "scripts": {
-    "start": "node bot.js",
-    "dev": "nodemon bot.js"
+    "start": "node bot-enhanced.js",
+    "dev": "nodemon bot-enhanced.js"
   },
   "keywords": [
     "telegram",
@@ -13,7 +13,11 @@
     "stock",
     "screener",
     "idx",
-    "indonesia"
+    "indonesia",
+    "stochastic",
+    "trading",
+    "performance-tracking",
+    "auto-scan"
   ],
   "author": "",
   "license": "MIT",
