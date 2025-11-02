@@ -194,6 +194,49 @@ bot.on('webhook_error', (error) => {
 
 console.log('✅ Bot initialized successfully in POLLING mode');
 
+// CRITICAL: Wrap bot.onText to add automatic blocking check to ALL commands
+const originalOnText = bot.onText.bind(bot);
+bot.onText = function(regexp, callback) {
+  originalOnText(regexp, (msg, match) => {
+    const chatId = msg.chat.id;
+    
+    // Always allow admin
+    if (isAdmin(chatId)) {
+      return callback(msg, match);
+    }
+    
+    // Check if user is blocked
+    if (blockedUsers.has(chatId)) {
+      console.log(`[BLOCKED] User ${chatId} tried command: ${msg.text}`);
+      
+      // Allow only /requestunblock for blocked users
+      if (msg.text && msg.text.startsWith('/requestunblock')) {
+        return callback(msg, match);
+      }
+      
+      // Block everything else
+      if (pendingApprovals.has(chatId)) {
+        bot.sendMessage(chatId, 
+          '🚫 You are blocked from using this bot.\n\n' +
+          '⏳ Your unblock request is pending admin review.\n\n' +
+          'Please wait for the administrator.'
+        );
+      } else {
+        bot.sendMessage(chatId, 
+          '🚫 You have been blocked from using this bot.\n\n' +
+          '📝 Type /requestunblock to request access again.'
+        );
+      }
+      return; // Stop execution - command will NOT run
+    }
+    
+    // User not blocked, proceed with command
+    callback(msg, match);
+  });
+};
+
+console.log('✅ Universal blocking protection enabled for ALL commands');
+
 // Helper Functions
 function calculateStochastic(data) {
   const k = CONFIG.STOCH_K_PERIOD;
