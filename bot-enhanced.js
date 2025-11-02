@@ -886,24 +886,33 @@ function hasAccess(chatId) {
 function checkAccess(msg, callback) {
   const chatId = msg.chat.id;
   
+  console.log(`[ACCESS CHECK] User ${chatId} trying to access`);
+  console.log(`[ACCESS CHECK] Has access: ${hasAccess(chatId)}`);
+  console.log(`[ACCESS CHECK] Is blocked: ${blockedUsers.has(chatId)}`);
+  console.log(`[ACCESS CHECK] Mode: ${CONFIG.ACCESS_MODE}`);
+  
+  // Check blocked status FIRST, before anything else
+  if (blockedUsers.has(chatId)) {
+    console.log(`[ACCESS CHECK] User ${chatId} is BLOCKED - denying access`);
+    bot.sendMessage(chatId, '🚫 You have been blocked from using this bot.');
+    return false;
+  }
+  
   if (hasAccess(chatId)) {
+    console.log(`[ACCESS CHECK] User ${chatId} has access - allowing`);
     callback();
     return true;
   }
   
   // User doesn't have access
-  if (blockedUsers.has(chatId)) {
-    bot.sendMessage(chatId, '🚫 You have been blocked from using this bot.');
-    return false;
-  }
+  console.log(`[ACCESS CHECK] User ${chatId} does NOT have access`);
   
   if (CONFIG.ACCESS_MODE === 'whitelist') {
     bot.sendMessage(chatId, 
-      '🔒 *Access Restricted*\n\n' +
+      '🔒 Access Restricted\n\n' +
       'This bot is private and requires authorization.\n\n' +
-      'Your Telegram ID: `' + chatId + '`\n\n' +
-      'Please contact the bot administrator to request access.',
-      { parse_mode: 'Markdown' }
+      'Your Telegram ID: ' + chatId + '\n\n' +
+      'Please contact the bot administrator to request access.'
     );
     return false;
   }
@@ -911,20 +920,18 @@ function checkAccess(msg, callback) {
   if (CONFIG.ACCESS_MODE === 'approval') {
     if (pendingApprovals.has(chatId)) {
       bot.sendMessage(chatId, 
-        '⏳ *Access Pending*\n\n' +
+        '⏳ Access Pending\n\n' +
         'Your access request is waiting for admin approval.\n\n' +
-        'Please wait for the administrator to approve your request.',
-        { parse_mode: 'Markdown' }
+        'Please wait for the administrator to approve your request.'
       );
     } else {
       pendingApprovals.add(chatId);
       saveData();
       
       bot.sendMessage(chatId,
-        '📝 *Access Request Submitted*\n\n' +
+        '📝 Access Request Submitted\n\n' +
         'Your request has been sent to the administrator.\n\n' +
-        'You will be notified once approved.',
-        { parse_mode: 'Markdown' }
+        'You will be notified once approved.'
       );
       
       // Notify admin
@@ -932,14 +939,13 @@ function checkAccess(msg, callback) {
         const user = msg.from;
         const userName = user.username ? `@${user.username}` : user.first_name || 'Unknown';
         bot.sendMessage(CONFIG.ADMIN_ID,
-          `🔔 *New Access Request*\n\n` +
+          `🔔 New Access Request\n\n` +
           `User: ${userName}\n` +
           `Name: ${user.first_name} ${user.last_name || ''}\n` +
-          `ID: \`${chatId}\`\n\n` +
+          `ID: ${chatId}\n\n` +
           `Use /approve ${chatId} to grant access\n` +
-          `Use /deny ${chatId} to deny access`,
-          { parse_mode: 'Markdown' }
-        );
+          `Use /deny ${chatId} to deny access`
+        ).catch(err => console.error('Failed to notify admin:', err.message));
       }
     }
     return false;
@@ -1986,24 +1992,45 @@ bot.onText(/\/block (.+)/, (msg, match) => {
   const userId = parseInt(match[1]);
   
   if (isNaN(userId)) {
-    bot.sendMessage(chatId, '❌ Invalid user ID');
+    bot.sendMessage(chatId, '❌ Invalid user ID. Use: /block 123456789');
     return;
   }
   
+  if (userId === chatId) {
+    bot.sendMessage(chatId, '❌ You cannot block yourself!');
+    return;
+  }
+  
+  // Add to blocked list
   blockedUsers.add(userId);
+  
+  // Remove from all access lists
   allowedUsers.delete(userId);
   subscribers.delete(userId);
   pendingApprovals.delete(userId);
+  userSectors.delete(userId);
+  watchlist.delete(userId);
+  
   saveData();
   
-  bot.sendMessage(chatId, `🚫 User ${userId} has been blocked.`);
+  console.log(`[BLOCK] Admin blocked user ${userId}`);
+  console.log(`[BLOCK] User removed from all lists`);
+  
+  bot.sendMessage(chatId, 
+    `🚫 User Blocked\n\n` +
+    `User ID: ${userId}\n` +
+    `Status: Blocked and removed from all lists\n\n` +
+    `The user will not be able to use the bot.`
+  );
   
   // Notify the user
   bot.sendMessage(userId,
-    '🚫 *Access Blocked*\n\n' +
-    'You have been blocked from using this bot.',
-    { parse_mode: 'Markdown' }
-  ).catch(() => {});
+    '🚫 Access Blocked\n\n' +
+    'You have been blocked from using this bot.\n\n' +
+    'All your data has been removed.'
+  ).catch(err => {
+    console.log(`[BLOCK] Could not notify user ${userId}: ${err.message}`);
+  });
 });
 
 bot.onText(/\/unblock (.+)/, (msg, match) => {
