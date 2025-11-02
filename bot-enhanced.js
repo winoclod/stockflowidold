@@ -1180,7 +1180,7 @@ bot.onText(/\/addsector (.+)/, (msg, match) => {
   userSectors.set(chatId, currentSectors);
   saveData();
   
-  bot.sendMessage(chatId, `✅ Added *${matchedSector}* to your monitored sectors!\n\nYou now monitor ${currentSectors.length} sectors.\nUse /mysectors to view all.`, { parse_mode: 'Markdown' });
+  bot.sendMessage(chatId, `✅ Added ${matchedSector} to your monitored sectors!\n\nYou now monitor ${currentSectors.length} sectors.\nUse /mysectors to view all.`);
 });
 
 bot.onText(/\/removesector (.+)/, (msg, match) => {
@@ -1212,7 +1212,7 @@ bot.onText(/\/removesector (.+)/, (msg, match) => {
     bot.sendMessage(chatId, `⚠️ Cannot remove all sectors. Reset to default sectors.\n\nUse /mysectors to view.`);
   } else {
     userSectors.set(chatId, currentSectors);
-    bot.sendMessage(chatId, `✅ Removed *${matchedSector}* from your monitored sectors.\n\nYou now monitor ${currentSectors.length} sectors.`, { parse_mode: 'Markdown' });
+    bot.sendMessage(chatId, `✅ Removed ${matchedSector} from your monitored sectors.\n\nYou now monitor ${currentSectors.length} sectors.`);
   }
   
   saveData();
@@ -1522,25 +1522,25 @@ bot.onText(/\/stats/, (msg) => {
     .sort((a, b) => b[1] - a[1])
     .slice(0, 5);
   
-  let message = `📊 *Bot Statistics*\n\n`;
+  let message = `📊 Bot Statistics\n\n`;
   message += `👥 Total Users: ${userSectors.size}\n`;
   message += `🔔 Subscribers: ${subscribers.size}\n`;
   message += `👀 Total Watchlist Stocks: ${totalWatchedStocks}\n`;
   message += `📂 Avg Sectors/User: ${(Array.from(userSectors.values()).reduce((sum, sectors) => sum + sectors.length, 0) / userSectors.size || 0).toFixed(1)}\n`;
   message += `📊 Signal History: ${signalHistory.length} records\n\n`;
   
-  message += `*Top 5 Monitored Sectors:*\n`;
+  message += `Top 5 Monitored Sectors:\n`;
   topSectors.forEach(([sector, count], index) => {
     message += `${index + 1}. ${sector}: ${count} users\n`;
   });
   
   if (subscribers.size > 0) {
-    message += `\n*Subscriber Management:*\n`;
+    message += `\nSubscriber Management:\n`;
     message += `/unsubscribeall - Unsubscribe all users\n`;
     message += `/unsubscribeall_silent - Unsubscribe without notification\n`;
   }
   
-  bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
+  bot.sendMessage(chatId, message);
 });
 
 bot.onText(/\/broadcast (.+)/, async (msg, match) => {
