@@ -1910,15 +1910,98 @@ bot.onText(/\/pending/, (msg) => {
     return;
   }
   
-  let message = `⏳ *Pending Access Requests (${pendingApprovals.size})*\n\n`;
+  let message = `⏳ Pending Access Requests (${pendingApprovals.size})\n\n`;
   
   Array.from(pendingApprovals).forEach((userId, index) => {
-    message += `${index + 1}. User ID: \`${userId}\`\n`;
+    message += `${index + 1}. User ID: ${userId}\n`;
     message += `   /approve ${userId}\n`;
     message += `   /deny ${userId}\n\n`;
   });
   
-  bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
+  bot.sendMessage(chatId, message);
+});
+
+bot.onText(/\/listusers/, (msg) => {
+  const chatId = msg.chat.id;
+  
+  if (!isAdmin(chatId)) {
+    bot.sendMessage(chatId, '❌ Admin only command');
+    return;
+  }
+  
+  let message = `👥 Bot Users Summary\n\n`;
+  
+  // Subscribers
+  message += `🔔 Subscribers: ${subscribers.size}\n`;
+  if (subscribers.size > 0) {
+    message += `Subscribed User IDs:\n`;
+    Array.from(subscribers).forEach((id, index) => {
+      message += `${index + 1}. ${id}\n`;
+    });
+    message += `\n`;
+  }
+  
+  // Users with custom sectors
+  message += `⚙️ Users with Custom Sectors: ${userSectors.size}\n`;
+  if (userSectors.size > 0) {
+    message += `User IDs:\n`;
+    Array.from(userSectors.keys()).forEach((id, index) => {
+      const sectors = userSectors.get(id);
+      message += `${index + 1}. ${id} (${sectors.length} sectors)\n`;
+    });
+    message += `\n`;
+  }
+  
+  // Watchlist users
+  const watchlistUsers = watchlist.size;
+  message += `👀 Users with Watchlists: ${watchlistUsers}\n`;
+  if (watchlistUsers > 0) {
+    message += `User IDs:\n`;
+    Array.from(watchlist.keys()).forEach((id, index) => {
+      const stocks = watchlist.get(id);
+      message += `${index + 1}. ${id} (${stocks.length} stocks)\n`;
+    });
+    message += `\n`;
+  }
+  
+  // Access control
+  if (CONFIG.ACCESS_MODE === 'whitelist' || CONFIG.ACCESS_MODE === 'approval') {
+    message += `✅ Allowed Users: ${allowedUsers.size}\n`;
+    if (allowedUsers.size > 0) {
+      message += `Allowed User IDs:\n`;
+      Array.from(allowedUsers).forEach((id, index) => {
+        message += `${index + 1}. ${id}\n`;
+      });
+      message += `\n`;
+    }
+  }
+  
+  // Pending approvals
+  if (CONFIG.ACCESS_MODE === 'approval') {
+    message += `⏳ Pending Approvals: ${pendingApprovals.size}\n`;
+    if (pendingApprovals.size > 0) {
+      message += `Use /pending to see details\n\n`;
+    }
+  }
+  
+  // Blocked users
+  message += `🚫 Blocked Users: ${blockedUsers.size}\n`;
+  if (blockedUsers.size > 0) {
+    message += `Blocked User IDs:\n`;
+    Array.from(blockedUsers).forEach((id, index) => {
+      message += `${index + 1}. ${id}\n`;
+    });
+  }
+  
+  // Split message if too long
+  if (message.length > 4000) {
+    const chunks = message.match(/[\s\S]{1,4000}/g) || [];
+    chunks.forEach(chunk => {
+      bot.sendMessage(chatId, chunk);
+    });
+  } else {
+    bot.sendMessage(chatId, message);
+  }
 });
 
 bot.onText(/\/accessmode/, (msg) => {
