@@ -1727,6 +1727,193 @@ bot.onText(/\/cancel/, (msg) => {
   bot.sendMessage(chatId, '✅ Operation cancelled.');
 });
 
+// NEW: Remove ALL users and their data (except admin)
+bot.onText(/\/kickall/, async (msg) => {
+  const chatId = msg.chat.id;
+  
+  if (!isAdmin(chatId)) {
+    bot.sendMessage(chatId, '❌ Admin only command');
+    return;
+  }
+  
+  const totalUsers = new Set([
+    ...subscribers,
+    ...userSectors.keys(),
+    ...watchlist.keys(),
+    ...allowedUsers,
+    ...pendingApprovals
+  ]).size;
+  
+  if (totalUsers === 0) {
+    bot.sendMessage(chatId, '✅ No users to remove.');
+    return;
+  }
+  
+  const message = 
+    `⚠️ CONFIRM KICK ALL USERS\n\n` +
+    `This will REMOVE ALL USER DATA:\n` +
+    `• ${subscribers.size} subscribers\n` +
+    `• ${userSectors.size} custom sector configs\n` +
+    `• ${watchlist.size} watchlists\n` +
+    `• ${allowedUsers.size} allowed users\n` +
+    `• ${pendingApprovals.size} pending approvals\n` +
+    `• Total unique users: ${totalUsers}\n\n` +
+    `⚠️ This will:\n` +
+    `✓ Remove all subscriptions\n` +
+    `✓ Delete all custom sectors\n` +
+    `✓ Clear all watchlists\n` +
+    `✓ Clear whitelist/approvals\n` +
+    `✓ Notify users (optional)\n\n` +
+    `🛡️ Admin (you) will be preserved\n\n` +
+    `Choose an option:\n` +
+    `/confirmkickall - Remove & notify users\n` +
+    `/confirmkickall_silent - Remove without notification\n` +
+    `/cancel - Cancel operation`;
+  
+  bot.sendMessage(chatId, message);
+});
+
+bot.onText(/\/confirmkickall$/, async (msg) => {
+  const chatId = msg.chat.id;
+  
+  if (!isAdmin(chatId)) {
+    bot.sendMessage(chatId, '❌ Admin only command');
+    return;
+  }
+  
+  const statusMsg = await bot.sendMessage(chatId, '🔄 Removing all users...');
+  
+  // Collect all unique user IDs (except admin)
+  const allUserIds = new Set([
+    ...subscribers,
+    ...userSectors.keys(),
+    ...watchlist.keys()
+  ]);
+  
+  // Remove admin from the list
+  allUserIds.delete(chatId);
+  
+  const totalUsers = allUserIds.size;
+  let notified = 0;
+  let failed = 0;
+  
+  // Notify users
+  for (const userId of allUserIds) {
+    try {
+      await bot.sendMessage(userId,
+        `📢 Bot Access Removed\n\n` +
+        `Your access to this bot has been removed by the administrator.\n\n` +
+        `All your data (subscriptions, watchlists, settings) has been cleared.\n\n` +
+        `If you believe this is an error, please contact the bot administrator.`
+      );
+      notified++;
+    } catch (error) {
+      failed++;
+    }
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  
+  // Clear all data (except admin)
+  const adminSectors = userSectors.get(chatId);
+  const adminWatchlist = watchlist.get(chatId);
+  const isAdminSubscribed = subscribers.has(chatId);
+  
+  subscribers.clear();
+  userSectors.clear();
+  watchlist.clear();
+  allowedUsers.clear();
+  pendingApprovals.clear();
+  blockedUsers.clear();
+  
+  // Restore admin data
+  if (isAdminSubscribed) subscribers.add(chatId);
+  if (adminSectors) userSectors.set(chatId, adminSectors);
+  if (adminWatchlist) watchlist.set(chatId, adminWatchlist);
+  allowedUsers.add(chatId);
+  
+  saveData();
+  
+  bot.editMessageText(
+    `✅ KICK ALL COMPLETE!\n\n` +
+    `Removed: ${totalUsers} users\n` +
+    `Notified: ${notified} users\n` +
+    `Failed: ${failed} users\n\n` +
+    `All user data has been cleared.\n` +
+    `Your admin data has been preserved.\n\n` +
+    `The bot is now clean!`,
+    {
+      chat_id: chatId,
+      message_id: statusMsg.message_id
+    }
+  );
+  
+  console.log(`Admin kicked all ${totalUsers} users from the bot`);
+});
+
+bot.onText(/\/confirmkickall_silent/, async (msg) => {
+  const chatId = msg.chat.id;
+  
+  if (!isAdmin(chatId)) {
+    bot.sendMessage(chatId, '❌ Admin only command');
+    return;
+  }
+  
+  // Collect stats before clearing
+  const stats = {
+    subscribers: subscribers.size,
+    sectors: userSectors.size,
+    watchlists: watchlist.size,
+    allowed: allowedUsers.size,
+    pending: pendingApprovals.size,
+    blocked: blockedUsers.size
+  };
+  
+  const allUserIds = new Set([
+    ...subscribers,
+    ...userSectors.keys(),
+    ...watchlist.keys()
+  ]);
+  allUserIds.delete(chatId);
+  const totalUsers = allUserIds.size;
+  
+  // Save admin data
+  const adminSectors = userSectors.get(chatId);
+  const adminWatchlist = watchlist.get(chatId);
+  const isAdminSubscribed = subscribers.has(chatId);
+  
+  // Clear everything
+  subscribers.clear();
+  userSectors.clear();
+  watchlist.clear();
+  allowedUsers.clear();
+  pendingApprovals.clear();
+  blockedUsers.clear();
+  
+  // Restore admin data
+  if (isAdminSubscribed) subscribers.add(chatId);
+  if (adminSectors) userSectors.set(chatId, adminSectors);
+  if (adminWatchlist) watchlist.set(chatId, adminWatchlist);
+  allowedUsers.add(chatId);
+  
+  saveData();
+  
+  bot.sendMessage(chatId,
+    `✅ SILENT KICK ALL COMPLETE!\n\n` +
+    `Removed ${totalUsers} users WITHOUT notification\n\n` +
+    `Cleared:\n` +
+    `• ${stats.subscribers} subscribers\n` +
+    `• ${stats.sectors} custom configs\n` +
+    `• ${stats.watchlists} watchlists\n` +
+    `• ${stats.allowed} allowed users\n` +
+    `• ${stats.pending} pending approvals\n` +
+    `• ${stats.blocked} blocked users\n\n` +
+    `Your admin data has been preserved.\n` +
+    `The bot is now clean!`
+  );
+  
+  console.log(`Admin silently kicked all ${totalUsers} users from the bot`);
+});
+
 // Access Control Commands (Admin Only)
 bot.onText(/\/approve (.+)/, (msg, match) => {
   const chatId = msg.chat.id;
