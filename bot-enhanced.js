@@ -159,9 +159,40 @@ const IDX_SECTORS = {
   'Electronic Technology': ['MTDL', 'PTSN', 'AXIO', 'IKBI', 'LPIN', 'ZYRX', 'RCCC']
 };
 
-// Initialize bot
+// Initialize bot with robust polling
 const token = process.env.TELEGRAM_BOT_TOKEN;
-const bot = new TelegramBot(token, { polling: true });
+
+if (!token) {
+  console.error('❌ TELEGRAM_BOT_TOKEN is not set!');
+  process.exit(1);
+}
+
+console.log('📡 Initializing bot in POLLING mode...');
+
+const bot = new TelegramBot(token, {
+  polling: {
+    interval: 300,
+    autoStart: true,
+    params: {
+      timeout: 10
+    }
+  }
+});
+
+// Handle polling errors
+bot.on('polling_error', (error) => {
+  console.error('❌ Polling error:', error.code, error.message);
+  if (error.code === 'EFATAL') {
+    console.error('Fatal polling error - bot may need restart');
+  }
+});
+
+// Handle webhook errors (shouldn't happen in polling mode)
+bot.on('webhook_error', (error) => {
+  console.error('❌ Webhook error:', error);
+});
+
+console.log('✅ Bot initialized successfully in POLLING mode');
 
 // Helper Functions
 function calculateStochastic(data) {
@@ -2068,6 +2099,17 @@ bot.on('callback_query', async (callbackQuery) => {
 
 // Start the bot
 console.log('🤖 Bot is starting...');
+
+// Delete any existing webhook to ensure polling works
+bot.deleteWebHook()
+  .then(() => {
+    console.log('✅ Webhook deleted (if any existed)');
+    console.log('📡 Bot is now in pure POLLING mode');
+  })
+  .catch(err => {
+    console.log('ℹ️  No webhook to delete (or error deleting):', err.message);
+  });
+
 loadData();
 setupAutoScans();
 console.log('🤖 Bot is running with enhanced features!');
