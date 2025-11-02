@@ -2407,6 +2407,25 @@ bot.deleteWebHook()
     console.log('ℹ️  No webhook to delete (or error deleting):', err.message);
   });
 
+// Global message handler to block users at the earliest point
+bot.on('message', (msg) => {
+  const chatId = msg.chat.id;
+  
+  // Skip if it's the admin
+  if (isAdmin(chatId)) {
+    return;
+  }
+  
+  // Check if user is blocked
+  if (blockedUsers.has(chatId)) {
+    console.log(`[GLOBAL BLOCK] Blocked user ${chatId} tried to send: ${msg.text || '[media]'}`);
+    bot.sendMessage(chatId, '🚫 You have been blocked from using this bot.')
+      .catch(err => console.error(`Failed to notify blocked user ${chatId}:`, err.message));
+    // Don't process further - message is blocked
+    return;
+  }
+});
+
 loadData();
 setupAutoScans();
 console.log('🤖 Bot is running with enhanced features!');
