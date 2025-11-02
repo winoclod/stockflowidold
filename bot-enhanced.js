@@ -2152,8 +2152,6 @@ bot.onText(/\/requestunblock/, (msg) => {
     ).catch(err => console.error('Failed to notify admin:', err.message));
   }
 });
-  ).catch(() => {});
-});
 
 bot.onText(/\/adduser (.+)/, (msg, match) => {
   const chatId = msg.chat.id;
