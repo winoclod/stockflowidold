@@ -61,6 +61,17 @@ const allowedUsers = new Set(); // Whitelist of allowed user IDs
 const pendingApprovals = new Set(); // Users waiting for approval
 const blockedUsers = new Set(); // Blocked users
 
+// Access history tracking
+const accessHistory = []; // Array of {userId, username, timestamp, command, result}
+// Structure: {
+//   userId: 123456789,
+//   username: '@user',
+//   name: 'John Doe',
+//   timestamp: '2025-11-03T10:30:00Z',
+//   command: '/start',
+//   result: 'APPROVED' | 'DENIED' | 'BLOCKED' | 'PENDING'
+// }
+
 // Signal history tracking
 const signalHistory = []; // Array of {symbol, date, signal, entryPrice, currentPrice, result, days}
 // Structure: {
@@ -96,10 +107,12 @@ function loadData() {
       if (data.pendingApprovals) data.pendingApprovals.forEach(id => pendingApprovals.add(id));
       if (data.blockedUsers) data.blockedUsers.forEach(id => blockedUsers.add(id));
       if (data.signalHistory) signalHistory.push(...data.signalHistory);
+      if (data.accessHistory) accessHistory.push(...data.accessHistory);
       
       console.log('✅ Data loaded successfully');
       console.log(`   Users: ${allowedUsers.size} allowed, ${pendingApprovals.size} pending, ${blockedUsers.size} blocked`);
       console.log(`   Signal History: ${signalHistory.length} records`);
+      console.log(`   Access History: ${accessHistory.length} records`);
     }
     
     // Load whitelist from environment variable
@@ -123,6 +136,7 @@ function saveData() {
       pendingApprovals: Array.from(pendingApprovals),
       blockedUsers: Array.from(blockedUsers),
       signalHistory: signalHistory,
+      accessHistory: accessHistory.slice(-1000), // Keep last 1000 records
       lastUpdate: new Date().toISOString()
     };
     
@@ -906,6 +920,27 @@ function isAdmin(chatId) {
   return CONFIG.ADMIN_ID && chatId.toString() === CONFIG.ADMIN_ID.toString();
 }
 
+// Log access attempts
+function logAccess(userId, username, name, command, result) {
+  const entry = {
+    userId,
+    username,
+    name,
+    timestamp: new Date().toISOString(),
+    command,
+    result // 'APPROVED', 'DENIED', 'BLOCKED', 'PENDING'
+  };
+  
+  accessHistory.push(entry);
+  
+  // Keep only last 1000 records in memory
+  if (accessHistory.length > 1000) {
+    accessHistory.shift();
+  }
+  
+  saveData();
+}
+
 // Access control functions
 function hasAccess(chatId) {
   // Admin always has access
@@ -928,10 +963,20 @@ function hasAccess(chatId) {
 
 function checkAccess(msg, callback) {
   const chatId = msg.chat.id;
+  const user = msg.from;
+  const userName = user.username ? `@${user.username}` : user.first_name || 'Unknown';
+  const fullName = `${user.first_name || ''} ${user.last_name || ''}`.trim();
+  const command = msg.text || '[non-text]';
+  
+  console.log(`[ACCESS CHECK] User ${chatId} (${userName}) trying to access`);
+  console.log(`[ACCESS CHECK] Command: ${command}`);
   
   // CRITICAL: Check blocked status FIRST, before anything else
   if (blockedUsers.has(chatId)) {
-    console.log(`[ACCESS CHECK] User ${chatId} is BLOCKED - denying ALL access`);
+    console.log(`[ACCESS CHECK] ❌ User ${chatId} is BLOCKED - denying ALL access`);
+    
+    // Log blocked access attempt
+    logAccess(chatId, userName, fullName, command, 'BLOCKED');
     
     // Check if user has already requested unblock
     if (pendingApprovals.has(chatId)) {
@@ -951,20 +996,30 @@ function checkAccess(msg, callback) {
     return false; // Return false to stop execution
   }
   
-  console.log(`[ACCESS CHECK] User ${chatId} trying to access`);
   console.log(`[ACCESS CHECK] Has access: ${hasAccess(chatId)}`);
   console.log(`[ACCESS CHECK] Mode: ${CONFIG.ACCESS_MODE}`);
+  console.log(`[ACCESS CHECK] In allowedUsers: ${allowedUsers.has(chatId)}`);
+  console.log(`[ACCESS CHECK] In pendingApprovals: ${pendingApprovals.has(chatId)}`);
   
   if (hasAccess(chatId)) {
-    console.log(`[ACCESS CHECK] User ${chatId} has access - allowing`);
+    console.log(`[ACCESS CHECK] ✅ User ${chatId} (${userName}) has access - allowing`);
+    
+    // Log successful access
+    logAccess(chatId, userName, fullName, command, 'APPROVED');
+    
     callback();
     return true;
   }
   
   // User doesn't have access
-  console.log(`[ACCESS CHECK] User ${chatId} does NOT have access`);
+  console.log(`[ACCESS CHECK] ❌ User ${chatId} (${userName}) does NOT have access`);
   
   if (CONFIG.ACCESS_MODE === 'whitelist') {
+    console.log(`[ACCESS CHECK] Whitelist mode - user not in whitelist`);
+    
+    // Log denied access
+    logAccess(chatId, userName, fullName, command, 'DENIED');
+    
     bot.sendMessage(chatId, 
       '🔒 Access Restricted\n\n' +
       'This bot is private and requires authorization.\n\n' +
@@ -976,13 +1031,23 @@ function checkAccess(msg, callback) {
   
   if (CONFIG.ACCESS_MODE === 'approval') {
     if (pendingApprovals.has(chatId)) {
+      console.log(`[ACCESS CHECK] User ${chatId} already has pending approval`);
+      
+      // Log pending access
+      logAccess(chatId, userName, fullName, command, 'PENDING');
+      
       bot.sendMessage(chatId, 
         '⏳ Access Pending\n\n' +
         'Your access request is waiting for admin approval.\n\n' +
         'Please wait for the administrator to approve your request.'
       );
     } else {
+      console.log(`[ACCESS CHECK] Adding user ${chatId} to pending approvals`);
       pendingApprovals.add(chatId);
+      
+      // Log new pending request
+      logAccess(chatId, userName, fullName, command, 'PENDING');
+      
       saveData();
       
       bot.sendMessage(chatId,
@@ -993,12 +1058,11 @@ function checkAccess(msg, callback) {
       
       // Notify admin
       if (CONFIG.ADMIN_ID) {
-        const user = msg.from;
-        const userName = user.username ? `@${user.username}` : user.first_name || 'Unknown';
+        console.log(`[ACCESS CHECK] Notifying admin about user ${chatId}`);
         bot.sendMessage(CONFIG.ADMIN_ID,
           `🔔 New Access Request\n\n` +
           `User: ${userName}\n` +
-          `Name: ${user.first_name} ${user.last_name || ''}\n` +
+          `Name: ${fullName}\n` +
           `ID: ${chatId}\n\n` +
           `Use /approve ${chatId} to grant access\n` +
           `Use /deny ${chatId} to deny access`
@@ -1008,56 +1072,12 @@ function checkAccess(msg, callback) {
     return false;
   }
   
+  console.log(`[ACCESS CHECK] Unknown access mode or no access - denying`);
+  
+  // Log denied access
+  logAccess(chatId, userName, fullName, command, 'DENIED');
+  
   return false;
-}
-
-// Access control check
-function hasAccess(chatId) {
-  // If whitelist is disabled, everyone has access
-  if (!CONFIG.WHITELIST_ENABLED) {
-    return true;
-  }
-  
-  // Admin always has access
-  if (isAdmin(chatId)) {
-    return true;
-  }
-  
-  // Check if user is in whitelist
-  return CONFIG.WHITELIST_USERS.includes(chatId.toString());
-}
-
-// Middleware to check access before processing commands
-function checkAccess(msg, callback) {
-  const chatId = msg.chat.id;
-  
-  if (!hasAccess(chatId)) {
-    bot.sendMessage(chatId, 
-      '🔒 *Access Restricted*\n\n' +
-      'This bot is private and requires authorization.\n\n' +
-      'Your Telegram ID: `' + chatId + '`\n\n' +
-      'Please contact the bot administrator to request access.',
-      { parse_mode: 'Markdown' }
-    );
-    
-    // Notify admin of access attempt
-    if (CONFIG.ADMIN_ID) {
-      bot.sendMessage(CONFIG.ADMIN_ID,
-        `⚠️ *Unauthorized Access Attempt*\n\n` +
-        `User ID: ${chatId}\n` +
-        `Username: @${msg.from.username || 'N/A'}\n` +
-        `Name: ${msg.from.first_name || ''} ${msg.from.last_name || ''}\n\n` +
-        `To add this user:\n` +
-        `Add \`${chatId}\` to WHITELIST_USERS`,
-        { parse_mode: 'Markdown' }
-      ).catch(() => {});
-    }
-    
-    return false;
-  }
-  
-  callback();
-  return true;
 }
 
 // Bot Commands
@@ -1602,6 +1622,132 @@ bot.onText(/\/stats/, (msg) => {
     message += `/unsubscribeall - Unsubscribe all users\n`;
     message += `/unsubscribeall_silent - Unsubscribe without notification\n`;
   }
+  
+  bot.sendMessage(chatId, message);
+});
+
+// NEW: View access history
+bot.onText(/\/accesshistory(?:\s+(\d+))?/, async (msg, match) => {
+  const chatId = msg.chat.id;
+  
+  if (!isAdmin(chatId)) {
+    bot.sendMessage(chatId, '❌ Admin only command');
+    return;
+  }
+  
+  const limit = match[1] ? parseInt(match[1]) : 20;
+  const recentHistory = accessHistory.slice(-limit).reverse();
+  
+  if (recentHistory.length === 0) {
+    bot.sendMessage(chatId, 'ℹ️ No access history recorded yet.');
+    return;
+  }
+  
+  let message = `📜 Access History (Last ${recentHistory.length} records)\n\n`;
+  
+  recentHistory.forEach((entry, index) => {
+    const date = new Date(entry.timestamp);
+    const timeStr = date.toLocaleString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: 'Asia/Jakarta'
+    });
+    
+    const resultEmoji = {
+      'APPROVED': '✅',
+      'DENIED': '❌',
+      'BLOCKED': '🚫',
+      'PENDING': '⏳'
+    }[entry.result] || '❓';
+    
+    message += `${resultEmoji} ${timeStr}\n`;
+    message += `   User: ${entry.username || 'Unknown'}\n`;
+    message += `   ID: ${entry.userId}\n`;
+    message += `   Cmd: ${entry.command}\n`;
+    message += `   Result: ${entry.result}\n\n`;
+  });
+  
+  message += `\nTotal records: ${accessHistory.length}\n`;
+  message += `Use /accesshistory 50 to see more`;
+  
+  // Split if too long
+  if (message.length > 4000) {
+    const chunks = [];
+    let chunk = '';
+    const lines = message.split('\n');
+    
+    for (const line of lines) {
+      if ((chunk + line + '\n').length > 4000) {
+        chunks.push(chunk);
+        chunk = line + '\n';
+      } else {
+        chunk += line + '\n';
+      }
+    }
+    if (chunk) chunks.push(chunk);
+    
+    for (const c of chunks) {
+      await bot.sendMessage(chatId, c);
+    }
+  } else {
+    bot.sendMessage(chatId, message);
+  }
+});
+
+// Filter access history by user
+bot.onText(/\/userhistory (.+)/, (msg, match) => {
+  const chatId = msg.chat.id;
+  
+  if (!isAdmin(chatId)) {
+    bot.sendMessage(chatId, '❌ Admin only command');
+    return;
+  }
+  
+  const userId = parseInt(match[1]);
+  
+  if (isNaN(userId)) {
+    bot.sendMessage(chatId, '❌ Invalid user ID. Use: /userhistory 123456789');
+    return;
+  }
+  
+  const userHistory = accessHistory.filter(entry => entry.userId === userId);
+  
+  if (userHistory.length === 0) {
+    bot.sendMessage(chatId, `ℹ️ No access history for user ${userId}.`);
+    return;
+  }
+  
+  let message = `📜 Access History for User ${userId}\n\n`;
+  
+  const recent = userHistory.slice(-20).reverse();
+  
+  recent.forEach((entry, index) => {
+    const date = new Date(entry.timestamp);
+    const timeStr = date.toLocaleString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: 'Asia/Jakarta'
+    });
+    
+    const resultEmoji = {
+      'APPROVED': '✅',
+      'DENIED': '❌',
+      'BLOCKED': '🚫',
+      'PENDING': '⏳'
+    }[entry.result] || '❓';
+    
+    message += `${resultEmoji} ${timeStr}\n`;
+    message += `   ${entry.command} → ${entry.result}\n\n`;
+  });
+  
+  message += `\nUser: ${userHistory[0].username || 'Unknown'}\n`;
+  message += `Name: ${userHistory[0].name || 'Unknown'}\n`;
+  message += `Total attempts: ${userHistory.length}\n`;
+  message += `First seen: ${new Date(userHistory[0].timestamp).toLocaleString('en-US', { timeZone: 'Asia/Jakarta' })}`;
   
   bot.sendMessage(chatId, message);
 });
