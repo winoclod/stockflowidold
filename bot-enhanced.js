@@ -2739,8 +2739,8 @@ bot.onText(/\/accessmode/, (msg) => {
     return;
   }
   
-  let message = `🔐 *Access Control Status*\n\n`;
-  message += `Mode: *${CONFIG.ACCESS_MODE.toUpperCase()}*\n\n`;
+  let message = `🔐 Access Control Status\n\n`;
+  message += `Mode: ${CONFIG.ACCESS_MODE.toUpperCase()}\n\n`;
   
   if (CONFIG.ACCESS_MODE === 'open') {
     message += `🟢 Open Mode - Anyone can use (except blocked)\n`;
@@ -2750,17 +2750,17 @@ bot.onText(/\/accessmode/, (msg) => {
     message += `🔴 Approval Mode - Requires admin approval\n`;
   }
   
-  message += `\n📊 *Statistics:*\n`;
+  message += `\n📊 Statistics:\n`;
   message += `Allowed Users: ${allowedUsers.size}\n`;
   message += `Pending Approvals: ${pendingApprovals.size}\n`;
   message += `Blocked Users: ${blockedUsers.size}\n`;
   
-  message += `\n*Change mode in Railway:*\n`;
+  message += `\nChange mode in Railway:\n`;
   message += `ACCESS_MODE=open\n`;
   message += `ACCESS_MODE=whitelist\n`;
   message += `ACCESS_MODE=approval\n`;
   
-  bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
+  bot.sendMessage(chatId, message);
 });
 
 // Existing commands (sectors, screen, stock, etc.)
