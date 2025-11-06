@@ -2155,6 +2155,126 @@ bot.onText(/\/approve (.+)/, (msg, match) => {
   ).catch(() => {});
 });
 
+// NEW: Approve all pending users at once
+bot.onText(/\/approveall/, async (msg) => {
+  const chatId = msg.chat.id;
+  
+  if (!isAdmin(chatId)) {
+    bot.sendMessage(chatId, '❌ Admin only command');
+    return;
+  }
+  
+  if (pendingApprovals.size === 0) {
+    bot.sendMessage(chatId, 'ℹ️ No pending approval requests.');
+    return;
+  }
+  
+  // Show confirmation with user list
+  const pendingList = Array.from(pendingApprovals);
+  let confirmMsg = `⚠️ *Batch Approval Confirmation*\n\n`;
+  confirmMsg += `You are about to approve *${pendingList.length} users*:\n\n`;
+  
+  // Show first 10 users
+  const displayCount = Math.min(10, pendingList.length);
+  for (let i = 0; i < displayCount; i++) {
+    confirmMsg += `${i + 1}. User ID: ${pendingList[i]}\n`;
+  }
+  
+  if (pendingList.length > 10) {
+    confirmMsg += `\n... and ${pendingList.length - 10} more\n`;
+  }
+  
+  confirmMsg += `\n⚠️ This will give access to ALL pending users.\n\n`;
+  confirmMsg += `Reply with:\n`;
+  confirmMsg += `• /confirmapproveall - to proceed\n`;
+  confirmMsg += `• /cancel - to cancel`;
+  
+  bot.sendMessage(chatId, confirmMsg, { parse_mode: 'Markdown' });
+});
+
+// Confirm batch approval
+bot.onText(/\/confirmapproveall/, async (msg) => {
+  const chatId = msg.chat.id;
+  
+  if (!isAdmin(chatId)) {
+    bot.sendMessage(chatId, '❌ Admin only command');
+    return;
+  }
+  
+  if (pendingApprovals.size === 0) {
+    bot.sendMessage(chatId, 'ℹ️ No pending approvals to process.');
+    return;
+  }
+  
+  const pendingList = Array.from(pendingApprovals);
+  const total = pendingList.length;
+  
+  const statusMsg = await bot.sendMessage(chatId, 
+    `⏳ Approving ${total} users...\n\nThis may take a moment...`
+  );
+  
+  let approved = 0;
+  let failed = 0;
+  
+  for (const userId of pendingList) {
+    try {
+      // Add to allowed users
+      allowedUsers.add(userId);
+      pendingApprovals.delete(userId);
+      blockedUsers.delete(userId); // Remove from blocked if was blocked
+      
+      console.log(`[BATCH APPROVE] Approved user ${userId}`);
+      
+      // Notify user
+      await bot.sendMessage(userId,
+        '✅ *Access Approved!*\n\n' +
+        'You can now use the bot.\n\n' +
+        'Type /start to begin.',
+        { parse_mode: 'Markdown' }
+      ).catch(err => {
+        console.log(`Could not notify user ${userId}: ${err.message}`);
+      });
+      
+      approved++;
+      
+      // Update progress every 5 users
+      if (approved % 5 === 0) {
+        await bot.editMessageText(
+          `⏳ Approving users...\n\nProgress: ${approved}/${total}`,
+          {
+            chat_id: chatId,
+            message_id: statusMsg.message_id
+          }
+        ).catch(() => {});
+      }
+      
+      // Small delay to avoid rate limits
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+    } catch (error) {
+      console.error(`Failed to approve user ${userId}:`, error.message);
+      failed++;
+    }
+  }
+  
+  saveData();
+  
+  let resultMsg = `✅ *Batch Approval Complete*\n\n`;
+  resultMsg += `✅ Approved: ${approved}\n`;
+  if (failed > 0) {
+    resultMsg += `❌ Failed: ${failed}\n`;
+  }
+  resultMsg += `\nAll approved users have been notified.`;
+  
+  await bot.editMessageText(resultMsg, {
+    chat_id: chatId,
+    message_id: statusMsg.message_id,
+    parse_mode: 'Markdown'
+  });
+  
+  console.log(`[BATCH APPROVE] Completed: ${approved} approved, ${failed} failed`);
+});
+
 bot.onText(/\/deny (.+)/, (msg, match) => {
   const chatId = msg.chat.id;
   
@@ -2182,6 +2302,124 @@ bot.onText(/\/deny (.+)/, (msg, match) => {
     'Your access request has been denied by the administrator.',
     { parse_mode: 'Markdown' }
   ).catch(() => {});
+});
+
+// NEW: Deny all pending requests at once
+bot.onText(/\/denyall/, async (msg) => {
+  const chatId = msg.chat.id;
+  
+  if (!isAdmin(chatId)) {
+    bot.sendMessage(chatId, '❌ Admin only command');
+    return;
+  }
+  
+  if (pendingApprovals.size === 0) {
+    bot.sendMessage(chatId, 'ℹ️ No pending approval requests.');
+    return;
+  }
+  
+  // Show confirmation
+  const pendingList = Array.from(pendingApprovals);
+  let confirmMsg = `⚠️ *Batch Denial Confirmation*\n\n`;
+  confirmMsg += `You are about to deny *${pendingList.length} users*:\n\n`;
+  
+  // Show first 10 users
+  const displayCount = Math.min(10, pendingList.length);
+  for (let i = 0; i < displayCount; i++) {
+    confirmMsg += `${i + 1}. User ID: ${pendingList[i]}\n`;
+  }
+  
+  if (pendingList.length > 10) {
+    confirmMsg += `\n... and ${pendingList.length - 10} more\n`;
+  }
+  
+  confirmMsg += `\n⚠️ This will deny access to ALL pending users.\n\n`;
+  confirmMsg += `Reply with:\n`;
+  confirmMsg += `• /confirmdenyall - to proceed\n`;
+  confirmMsg += `• /cancel - to cancel`;
+  
+  bot.sendMessage(chatId, confirmMsg, { parse_mode: 'Markdown' });
+});
+
+// Confirm batch denial
+bot.onText(/\/confirmdenyall/, async (msg) => {
+  const chatId = msg.chat.id;
+  
+  if (!isAdmin(chatId)) {
+    bot.sendMessage(chatId, '❌ Admin only command');
+    return;
+  }
+  
+  if (pendingApprovals.size === 0) {
+    bot.sendMessage(chatId, 'ℹ️ No pending requests to process.');
+    return;
+  }
+  
+  const pendingList = Array.from(pendingApprovals);
+  const total = pendingList.length;
+  
+  const statusMsg = await bot.sendMessage(chatId, 
+    `⏳ Denying ${total} requests...\n\nThis may take a moment...`
+  );
+  
+  let denied = 0;
+  let failed = 0;
+  
+  for (const userId of pendingList) {
+    try {
+      // Remove from pending and allowed
+      pendingApprovals.delete(userId);
+      allowedUsers.delete(userId);
+      
+      console.log(`[BATCH DENY] Denied user ${userId}`);
+      
+      // Notify user
+      await bot.sendMessage(userId,
+        '❌ *Access Denied*\n\n' +
+        'Your access request has been denied by the administrator.',
+        { parse_mode: 'Markdown' }
+      ).catch(err => {
+        console.log(`Could not notify user ${userId}: ${err.message}`);
+      });
+      
+      denied++;
+      
+      // Update progress every 5 users
+      if (denied % 5 === 0) {
+        await bot.editMessageText(
+          `⏳ Denying requests...\n\nProgress: ${denied}/${total}`,
+          {
+            chat_id: chatId,
+            message_id: statusMsg.message_id
+          }
+        ).catch(() => {});
+      }
+      
+      // Small delay to avoid rate limits
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+    } catch (error) {
+      console.error(`Failed to deny user ${userId}:`, error.message);
+      failed++;
+    }
+  }
+  
+  saveData();
+  
+  let resultMsg = `✅ *Batch Denial Complete*\n\n`;
+  resultMsg += `❌ Denied: ${denied}\n`;
+  if (failed > 0) {
+    resultMsg += `⚠️ Failed: ${failed}\n`;
+  }
+  resultMsg += `\nAll denied users have been notified.`;
+  
+  await bot.editMessageText(resultMsg, {
+    chat_id: chatId,
+    message_id: statusMsg.message_id,
+    parse_mode: 'Markdown'
+  });
+  
+  console.log(`[BATCH DENY] Completed: ${denied} denied, ${failed} failed`);
 });
 
 bot.onText(/\/block (.+)/, (msg, match) => {
