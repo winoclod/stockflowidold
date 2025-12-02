@@ -321,6 +321,37 @@ function analyzeStochastic(stoch) {
   return '';
 }
 
+// Format IDR value (for value traded)
+function formatIDR(value) {
+  if (value >= 1e12) {
+    return (value / 1e12).toFixed(2) + 'T';  // Trillion
+  } else if (value >= 1e9) {
+    return (value / 1e9).toFixed(2) + 'B';   // Billion (Miliar)
+  } else if (value >= 1e6) {
+    return (value / 1e6).toFixed(2) + 'M';   // Million (Juta)
+  } else if (value >= 1e3) {
+    return (value / 1e3).toFixed(2) + 'K';
+  } else {
+    return value.toLocaleString();
+  }
+}
+
+// Format volume (shares)
+function formatVolume(value) {
+  if (value >= 1e9) {
+    return (value / 1e9).toFixed(2) + 'B';
+  } else if (value >= 1e6) {
+    return (value / 1e6).toFixed(2) + 'M';
+  } else if (value >= 1e3) {
+    return (value / 1e3).toFixed(2) + 'K';
+  } else {
+    return value.toLocaleString();
+  }
+}
+
+// Minimum average daily value for liquidity check (Rp 1 billion)
+const MIN_AVG_VALUE_IDR = 1e9;
+
 async function getStockData(symbol) {
   try {
     const ticker = `${symbol}.JK`;
@@ -375,12 +406,28 @@ async function screenStock(symbol) {
     const signal = analyzeStochastic(stoch);
     const lastData = data[data.length - 1];
     
+    // Calculate average volume (20-day)
+    const recentData = data.slice(-20);
+    const avgVolume = recentData.reduce((sum, d) => sum + d.volume, 0) / recentData.length;
+    
+    // Volume in IDR (value traded)
+    const volumeIDR = lastData.volume * lastData.close;
+    const avgVolumeIDR = avgVolume * lastData.close;
+    
+    // Liquidity check
+    const isLiquid = avgVolumeIDR >= MIN_AVG_VALUE_IDR;
+    
     return {
       symbol,
-      price: lastData.close.toFixed(2),
+      price: lastData.close,
       k: stoch.k.toFixed(2),
       d: stoch.d.toFixed(2),
       signal,
+      volume: lastData.volume,
+      avgVolume: Math.round(avgVolume),
+      volumeIDR: volumeIDR,
+      avgVolumeIDR: avgVolumeIDR,
+      isLiquid: isLiquid,
       date: lastData.date.toISOString().split('T')[0]
     };
   } catch (error) {
@@ -442,27 +489,33 @@ function formatResults(results, sectorName = '') {
   const withSignals = results.filter(r => r.signal && !r.error);
   const errors = results.filter(r => r.error);
   
-  let message = `📊 *Screening Results${sectorName ? ' - ' + sectorName : ''}*\n\n`;
+  let message = `📊 *${sectorName || 'Screening'} - ${withSignals.length} Signals*\n\n`;
   
   if (withSignals.length > 0) {
-    message += `🎯 *Stocks with Signals (${withSignals.length})*\n\n`;
+    // Sort by signal type (BUY first) then by value traded
+    withSignals.sort((a, b) => {
+      if (a.signal.includes('BUY') && !b.signal.includes('BUY')) return -1;
+      if (!a.signal.includes('BUY') && b.signal.includes('BUY')) return 1;
+      return (b.avgVolumeIDR || 0) - (a.avgVolumeIDR || 0);
+    });
     
     withSignals.forEach(r => {
-      message += `*${r.symbol}*\n`;
-      message += `Price: Rp ${r.price}\n`;
-      message += `%K: ${r.k} | %D: ${r.d}\n`;
-      message += `Signal: ${r.signal}\n`;
-      message += `Date: ${r.date}\n\n`;
+      const liquidityIcon = r.isLiquid ? '✅' : '⚠️';
+      const priceFormatted = typeof r.price === 'number' ? r.price.toLocaleString() : r.price;
+      const valueFormatted = formatIDR(r.avgVolumeIDR || 0);
+      
+      message += `${r.signal} *${r.symbol}* | ${priceFormatted} | K:${r.k} D:${r.d} | ${valueFormatted} ${liquidityIcon}\n`;
     });
   } else {
-    message += `No stocks with buy signals found.\n\n`;
+    message += `No stocks with buy signals found.\n`;
   }
   
-  message += `\n📈 Total screened: ${results.length}\n`;
-  message += `✅ With signals: ${withSignals.length}\n`;
+  message += `\n━━━━━━━━━━━━━━━━━━━━\n`;
+  message += `📈 Screened: ${results.length} | ✅ Signals: ${withSignals.length}`;
   if (errors.length > 0) {
-    message += `❌ Errors: ${errors.length}\n`;
+    message += ` | ❌ Errors: ${errors.length}`;
   }
+  message += `\n\n⚠️ _Not financial advice_`;
   
   return message;
 }
@@ -473,7 +526,7 @@ function getUserSectors(chatId) {
 }
 
 // Signal History Tracking Functions
-function recordSignal(symbol, signalType, price) {
+function recordSignal(symbol, signalType, price, volumeIDR = null) {
   const today = new Date().toISOString().split('T')[0];
   
   // Check if we already have this signal today
@@ -489,6 +542,7 @@ function recordSignal(symbol, signalType, price) {
       signalDate: today,
       signalType,
       entryPrice: parseFloat(price),
+      volumeIDR: volumeIDR,
       recorded: new Date().toISOString()
     });
     
@@ -727,7 +781,7 @@ async function performAutoScan(sessionName) {
         if (result.signal.includes('🟢')) {
           signalType = 'BUY';
         }
-        recordSignal(result.symbol, signalType, result.price);
+        recordSignal(result.symbol, signalType, result.price, result.avgVolumeIDR);
       }
     }
   }
@@ -2823,10 +2877,15 @@ bot.onText(/\/stock (.+)/, async (msg, match) => {
         return;
       }
       
-      let message = `📊 ${symbol} Analysis\n\n`;
-      message += `💰 Price: Rp ${result.price}\n`;
-      message += `📈 %K: ${result.k}\n`;
-      message += `📉 %D: ${result.d}\n`;
+      const priceFormatted = typeof result.price === 'number' ? result.price.toLocaleString() : result.price;
+      const liquidityStatus = result.isLiquid ? '✅ Liquid' : '⚠️ Low liquidity';
+      
+      let message = `📊 *${symbol} Analysis*\n\n`;
+      message += `💰 Price: Rp ${priceFormatted}\n`;
+      message += `📈 Stoch: %K ${result.k} | %D ${result.d}\n`;
+      message += `📊 Volume: ${formatVolume(result.volume)} (Avg: ${formatVolume(result.avgVolume)})\n`;
+      message += `💵 Value: Rp ${formatIDR(result.volumeIDR)} (Avg: Rp ${formatIDR(result.avgVolumeIDR)})\n`;
+      message += `🏷️ Liquidity: ${liquidityStatus}\n`;
       message += `📅 Date: ${result.date}\n`;
       
       if (result.signal) {
@@ -2846,7 +2905,8 @@ bot.onText(/\/stock (.+)/, async (msg, match) => {
       
       bot.editMessageText(message, {
         chat_id: chatId,
-        message_id: processingMsg.message_id
+        message_id: processingMsg.message_id,
+        parse_mode: 'Markdown'
       });
     } catch (error) {
       bot.editMessageText(`❌ Error: ${error.message}`, {
