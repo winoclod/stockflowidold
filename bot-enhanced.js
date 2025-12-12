@@ -669,11 +669,42 @@ async function performMomentumScan(progressCallback = null) {
     await new Promise(resolve => setTimeout(resolve, CONFIG.WAIT_TIME));
   }
   
-  // Filter valid results with positive change and sort lowest to highest
-  const validResults = results.filter(r => !r.error && r.priceChange !== undefined && r.priceChange > 0);
+  // Filter valid results based on screener rules:
+  // 1. 1 Day Price Returns (%) > 1
+  // 2. Price > 50
+  // 3. Near 52 Week High > 0.7
+  // 4. Value > 5,000,000,000 (5B IDR)
+  // 5. Price > 1 x Price MA 5
+  // 6. Volume > 2 x Volume MA 20
+  const validResults = results.filter(r => {
+    if (r.error) return false;
+    if (r.priceChange === undefined) return false;
+    
+    // Rule 1: 1 Day Price Returns > 1%
+    if (r.priceChange <= 1) return false;
+    
+    // Rule 2: Price > 50
+    if (r.price <= 50) return false;
+    
+    // Rule 3: Near 52 Week High > 0.7
+    if (!r.near52w || r.near52w <= 0.7) return false;
+    
+    // Rule 4: Value > 5B IDR
+    if (!r.avgVolumeIDR || r.avgVolumeIDR <= 5e9) return false;
+    
+    // Rule 5: Price > MA5 (uptrend)
+    if (!r.ma5 || r.price <= r.ma5) return false;
+    
+    // Rule 6: Volume > 2x avg volume (volume spike)
+    if (!r.volume || !r.avgVolume || r.volume <= (r.avgVolume * 2)) return false;
+    
+    return true;
+  });
+  
+  // Sort lowest to highest change
   validResults.sort((a, b) => a.priceChange - b.priceChange);
   
-  // Take 30 movers (sorted lowest to highest)
+  // Take up to 30 movers
   const topMovers = validResults.slice(0, 30);
   
   // Cache the results
