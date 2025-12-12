@@ -46,9 +46,8 @@ const AUTO_SCAN_CONFIG = {
   SCHEDULE: {
     MORNING_SCAN: '10:00',
     AFTERNOON_SCAN: '13:00',
+    MOMENTUM_SCAN: '15:30',
     EVENING_SCAN: '16:00',
-    DAILY_SUMMARY: '08:00',
-    MOMENTUM_SCAN: '15:30', // New: Momentum scan near market close
   }
 };
 
@@ -779,7 +778,7 @@ function formatMomentumResults(results) {
 }
 
 // Scheduled full oversold scan (runs at 10:00, 13:00, 16:00)
-async function performScheduledOversoldScan(scanName) {
+async function performScheduledFullOversoldScan(scanName) {
   console.log(`Running scheduled oversold scan: ${scanName}`);
   
   try {
@@ -1244,34 +1243,28 @@ function setupAutoScans() {
     return;
   }
   
-  // Morning scan (10:00 WIB)
+  // Morning full IDX oversold scan (10:00 WIB)
   const [morningHour, morningMin] = AUTO_SCAN_CONFIG.SCHEDULE.MORNING_SCAN.split(':');
   cron.schedule(`${morningMin} ${morningHour} * * 1-5`, () => {
-    performAutoScan('Morning Scan (10:00 WIB)');
+    performScheduledFullOversoldScan('Morning Scan (10:00 WIB)');
   }, { timezone: CONFIG.TIMEZONE });
   
-  // Afternoon scan (13:00 WIB)
+  // Afternoon full IDX oversold scan (13:00 WIB)
   const [afternoonHour, afternoonMin] = AUTO_SCAN_CONFIG.SCHEDULE.AFTERNOON_SCAN.split(':');
   cron.schedule(`${afternoonMin} ${afternoonHour} * * 1-5`, () => {
-    performAutoScan('Afternoon Scan (13:00 WIB)');
-  }, { timezone: CONFIG.TIMEZONE });
-  
-  // Evening scan (16:00 WIB)
-  const [eveningHour, eveningMin] = AUTO_SCAN_CONFIG.SCHEDULE.EVENING_SCAN.split(':');
-  cron.schedule(`${eveningMin} ${eveningHour} * * 1-5`, () => {
-    performAutoScan('Evening Scan (16:00 WIB)');
-  }, { timezone: CONFIG.TIMEZONE });
-  
-  // Daily summary (08:00 WIB)
-  const [summaryHour, summaryMin] = AUTO_SCAN_CONFIG.SCHEDULE.DAILY_SUMMARY.split(':');
-  cron.schedule(`${summaryMin} ${summaryHour} * * 1-5`, () => {
-    sendDailySummary();
+    performScheduledFullOversoldScan('Afternoon Scan (13:00 WIB)');
   }, { timezone: CONFIG.TIMEZONE });
   
   // Momentum scan (15:30 WIB - near market close)
   const [momentumHour, momentumMin] = AUTO_SCAN_CONFIG.SCHEDULE.MOMENTUM_SCAN.split(':');
   cron.schedule(`${momentumMin} ${momentumHour} * * 1-5`, () => {
     performScheduledMomentumScan();
+  }, { timezone: CONFIG.TIMEZONE });
+  
+  // Evening full IDX oversold scan (16:00 WIB)
+  const [eveningHour, eveningMin] = AUTO_SCAN_CONFIG.SCHEDULE.EVENING_SCAN.split(':');
+  cron.schedule(`${eveningMin} ${eveningHour} * * 1-5`, () => {
+    performScheduledFullOversoldScan('Evening Scan (16:00 WIB)');
   }, { timezone: CONFIG.TIMEZONE });
   
   // Watchlist check (every hour during market hours)
@@ -1285,11 +1278,10 @@ function setupAutoScans() {
   }, { timezone: CONFIG.TIMEZONE });
   
   console.log('✅ Auto-scan schedules set up:');
-  console.log(`   • Daily Summary: ${AUTO_SCAN_CONFIG.SCHEDULE.DAILY_SUMMARY} WIB`);
-  console.log(`   • Morning Scan: ${AUTO_SCAN_CONFIG.SCHEDULE.MORNING_SCAN} WIB`);
-  console.log(`   • Afternoon Scan: ${AUTO_SCAN_CONFIG.SCHEDULE.AFTERNOON_SCAN} WIB`);
-  console.log(`   • Momentum Scan: ${AUTO_SCAN_CONFIG.SCHEDULE.MOMENTUM_SCAN} WIB`);
-  console.log(`   • Evening Scan: ${AUTO_SCAN_CONFIG.SCHEDULE.EVENING_SCAN} WIB`);
+  console.log(`   • Morning Oversold (Full IDX): ${AUTO_SCAN_CONFIG.SCHEDULE.MORNING_SCAN} WIB`);
+  console.log(`   • Afternoon Oversold (Full IDX): ${AUTO_SCAN_CONFIG.SCHEDULE.AFTERNOON_SCAN} WIB`);
+  console.log(`   • Momentum Scan (Full IDX): ${AUTO_SCAN_CONFIG.SCHEDULE.MOMENTUM_SCAN} WIB`);
+  console.log(`   • Evening Oversold (Full IDX): ${AUTO_SCAN_CONFIG.SCHEDULE.EVENING_SCAN} WIB`);
   console.log(`   • Watchlist checks: Every hour during market hours`);
   console.log(`   • Performance update: 17:00 WIB (daily)`);
 }
@@ -1522,9 +1514,6 @@ bot.onText(/\/help/, (msg) => {
 *Auto-Scan Alerts:*
 • /subscribe - Get auto alerts
 • /unsubscribe - Stop alerts
-• /mysectors - Your current sectors
-• /addsector Finance - Add Finance to alerts
-• /removesector Tech - Remove Tech
 
 *Watchlist:*
 • /watchlist - View watched stocks
@@ -1532,7 +1521,6 @@ bot.onText(/\/help/, (msg) => {
 • /unwatch BBCA - Remove BBCA
 
 *Performance & Analysis:*
-• /today - Top 10 opportunities today
 • /performance - Signal accuracy (last 30 days)
 • /backtest BBCA - BBCA's signal history
 • /topstocks - Best performing stocks
@@ -1545,12 +1533,11 @@ bot.onText(/\/help/, (msg) => {
 🟢 BUY - Strong buy signal
 🟡 POTENTIAL - Potential buy
 
-*Scan Times (WIB):*
-☀️ 08:00 - Daily Summary
-☀️ 10:00 - Morning Scan
-🌤️ 13:00 - Afternoon Scan
-🚀 15:30 - Momentum Scan
-🌆 16:00 - Evening Scan
+*Scheduled Scans (WIB):*
+☀️ 10:00 - Oversold (Full IDX)
+🌤️ 13:00 - Oversold (Full IDX)
+🚀 15:30 - Momentum (Full IDX)
+🌆 16:00 - Oversold (Full IDX)
 🔄 17:00 - Performance Update
   `, { parse_mode: 'Markdown' });
 });
@@ -1751,63 +1738,6 @@ bot.onText(/\/unwatch (.+)/, (msg, match) => {
 });
 
 // FEATURE 3: Daily Summary Command
-bot.onText(/\/today/, async (msg) => {
-  const chatId = msg.chat.id;
-  
-  const processingMsg = await bot.sendMessage(chatId, `📊 Generating today's top opportunities...`);
-  
-  try {
-    // Quick scan of user's sectors
-    const userSelectedSectors = getUserSectors(chatId);
-    const allSignals = [];
-    
-    for (const sector of userSelectedSectors.slice(0, 5)) { // Limit to 5 sectors for speed
-      try {
-        const results = await screenSector(sector, chatId, null);
-        const withSignals = results.filter(r => r.signal && !r.error);
-        withSignals.forEach(s => allSignals.push({ ...s, sector }));
-      } catch (error) {
-        console.error(`Error scanning ${sector}:`, error.message);
-      }
-    }
-    
-    // Sort by signal strength
-    allSignals.sort((a, b) => {
-      if (a.signal === '🟢 BUY' && b.signal !== '🟢 BUY') return -1;
-      if (a.signal !== '🟢 BUY' && b.signal === '🟢 BUY') return 1;
-      return parseFloat(a.k) - parseFloat(b.k);
-    });
-    
-    const top10 = allSignals.slice(0, 10);
-    
-    let message = `☀️ *Today's Top Opportunities*\n\n`;
-    
-    if (top10.length === 0) {
-      message += `No strong signals found in your sectors.\n\n`;
-      message += `Scanned: ${userSelectedSectors.slice(0, 5).join(', ')}`;
-    } else {
-      message += `🎯 *Top ${top10.length} Signals*\n\n`;
-      
-      top10.forEach((s, index) => {
-        message += `${index + 1}. *${s.symbol}* (${s.sector})\n`;
-        message += `   Price: Rp ${s.price} | ${s.signal}\n`;
-        message += `   %K: ${s.k} | %D: ${s.d}\n\n`;
-      });
-    }
-    
-    bot.editMessageText(message, {
-      chat_id: chatId,
-      message_id: processingMsg.message_id,
-      parse_mode: 'Markdown'
-    });
-  } catch (error) {
-    bot.editMessageText(`❌ Error: ${error.message}`, {
-      chat_id: chatId,
-      message_id: processingMsg.message_id
-    });
-  }
-});
-
 // Historical Performance Commands
 bot.onText(/\/performance/, (msg) => {
   const chatId = msg.chat.id;
