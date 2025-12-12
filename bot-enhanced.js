@@ -669,11 +669,11 @@ async function performMomentumScan(progressCallback = null) {
     await new Promise(resolve => setTimeout(resolve, CONFIG.WAIT_TIME));
   }
   
-  // Filter valid results and sort by price change
-  const validResults = results.filter(r => !r.error && r.priceChange !== undefined);
-  validResults.sort((a, b) => b.priceChange - a.priceChange);
+  // Filter valid results with positive change and sort lowest to highest
+  const validResults = results.filter(r => !r.error && r.priceChange !== undefined && r.priceChange > 0);
+  validResults.sort((a, b) => a.priceChange - b.priceChange);
   
-  // Take top 30 movers
+  // Take 30 movers (sorted lowest to highest)
   const topMovers = validResults.slice(0, 30);
   
   // Cache the results
@@ -742,7 +742,7 @@ function formatFullOversoldResults(results) {
 
 // Format momentum scan results
 function formatMomentumResults(results) {
-  let message = `🚀 *IDX Momentum - Top 30 Movers*\n\n`;
+  let message = `🚀 *IDX Momentum - Gainers (Low to High)*\n\n`;
   
   results.forEach((r, index) => {
     const changeFormatted = r.priceChange >= 0 ? `+${r.priceChange.toFixed(2)}%` : `${r.priceChange.toFixed(2)}%`;
