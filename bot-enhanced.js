@@ -157,28 +157,19 @@ function saveData() {
   }
 }
 
-// IDX Sectors
+// IDX Sectors (Updated: 955 stocks in 11 sectors)
 const IDX_SECTORS = {
-  'Finance': ['BBCA', 'BBNI', 'BRIS', 'BNGA', 'NISP', 'BINA', 'ARTO', 'BDMN', 'BTPN', 'BSIM', 'BBTN', 'BNII', 'BBKP', 'BMAS', 'BTPS', 'BBMD', 'BJBR', 'BJTM', 'AGRO', 'BBYB', 'NOBU', 'BWSD', 'BCIC', 'MCOR', 'BGTG', 'BKSW', 'PNBS', 'DNAR', 'BBRI', 'BMRI', 'BNLI', 'MEGA', 'BBHI', 'PNBN', 'BBSI', 'BANK', 'MAYA', 'MASB', 'AMAR', 'SDRA', 'AGRS', 'INPC', 'BACA', 'BABP', 'BCAP', 'BNBA', 'BVIC', 'BEKS', 'INDO', 'MPRO', 'RISE', 'TBIG', 'CBDK', 'MKPI', 'BKSL', 'BSDE', 'PWON', 'CTRA', 'KPIG', 'JRPT', 'DUTI', 'DMAS', 'SMRA', 'LPKR', 'SMDM', 'MMLP', 'KIJA', 'UANG', 'MTLA', 'ASRI', 'RDTX', 'LPCK', 'NIRO', 'FMII', 'APLN', 'GMTD', 'BSBK', 'JIHD', 'DILD', 'ADCP', 'TRIN', 'GWSA', 'ROCK', 'ELTY', 'TRUE', 'GRIA', 'ASPI', 'MDLN', 'CITY', 'HOMI', 'AMAN', 'DADA', 'SWID', 'VAST', 'URBN', 'NASA', 'PUDP', 'REAL', 'JGLE', 'BKDP', 'SATU', 'KBAG', 'IPAC', 'EMDE', 'CBPE', 'KOTA', 'TARA', 'SAGE', 'PURI', 'CSIS', 'NZIA', 'RELF', 'BIPP', 'PAMG', 'BCIP', 'BAPI', 'ATAP', 'KOCI', 'HBAT', 'WINR', 'MSIE', 'SMMA', 'AMAG', 'ABDA', 'GSMF', 'MREI', 'ASRM', 'VINS', 'ASBI', 'CASA', 'LIFE', 'ASMI', 'JMAS', 'TOWR', 'BFIN', 'ADMF', 'SMIL', 'SKRN', 'IMJS', 'TIFA', 'BBLD', 'FUJI', 'CFIN', 'WOMF', 'HDFA', 'BPFI', 'VRNA', 'GOLD', 'TRUS', 'BPTR', 'TRJA', 'MGNA', 'DEFI', 'POLA', 'WIDI', 'IBFN', 'MENN', 'APIC', 'YULE', 'VICO', 'RELI', 'PANS', 'PADI', 'PEGE', 'KREN', 'SRTG', 'NICK', 'MTFN', 'AKSI', 'TRIM', 'SFAN', 'AMOR', 'STAR', 'LPPS', 'TUGU', 'LPGI', 'MTWI', 'AHAP', 'ASDM', 'ASJT', 'YOII'],
-  'Energy Minerals': ['DSSA', 'BYAN', 'UNTR', 'AADI', 'GEMS', 'ADMR', 'BUMI', 'ADRO', 'PTBA', 'ITMG', 'HRUM', 'INDY', 'MCOL', 'BSSR', 'TOBA', 'DWGL', 'ABMM', 'DEWA', 'BIPI', 'SMMT', 'MYOH', 'DOID', 'MAHA', 'MBAP', 'KKGI', 'ITMA', 'ARII', 'CNKO', 'GTBO', 'COAL', 'RMKO', 'FIRE', 'MEDC', 'ENRG', 'ELSA', 'SUNI', 'SICO', 'ESSA', 'SURE'],
-  'Non-Energy Minerals': ['AMMN', 'BRMS', 'ANTM', 'EMAS', 'MDKA', 'ARCI', 'PSAB', 'NICL', 'HILL', 'OKAS', 'MINE', 'CUAN', 'NCKL', 'MBMA', 'INCO', 'TINS', 'SGER', 'DKFT', 'NICE', 'MARK', 'IFSH', 'BRPT', 'DSNG', 'IFII', 'SULI', 'FWCT', 'INTP', 'SMGR', 'CMNT', 'SMBR', 'WSBP', 'BLES', 'CTTH', 'PIPA', 'BATR', 'KRAS', 'ISSP', 'GGRP', 'GDST', 'ZINC', 'BAJA', 'BTON', 'ALKA', 'INAI'],
-  'Utilities': ['BREN', 'CDIA', 'POWR', 'KEEN', 'HGII', 'LAPD', 'MPOW', 'PGAS', 'RAJA', 'INPS', 'CGAS', 'PGEO'],
-  'Technology Services': ['DCII', 'MLPT', 'ASII', 'GOTO', 'WIFI', 'EDGE', 'CYBR', 'MSTI', 'ASGR', 'IRSX', 'AREA', 'CHIP', 'NFCX', 'ATIC', 'LPLI', 'PGJO', 'AWAN', 'GPSO', 'MCAS', 'VTNY', 'TFAS', 'ELIT', 'JATI', 'TOSK', 'DIVA', 'WGSH', 'TRON', 'CASH', 'UVCR', 'RUNS', 'EPAC', 'INDX', 'DIGI', 'TRGU', 'TRST', 'ALDO', 'PDPP', 'SPMA', 'FPNI', 'INRU', 'NIKL', 'SPID', 'BUDI', 'MOLI', 'IPOL', 'BTEK', 'KDSI', 'HOKI', 'AYAM', 'PBRX', 'BRNA', 'APLI', 'EKAD', 'SMKL', 'TALF', 'ADMG', 'IGAR', 'MDKI', 'WMUU', 'CLPI', 'ASHA', 'AKPI', 'SSTM', 'YPAS', 'ESTI', 'ERTX', 'ANDI', 'OBMD', 'NPGF', 'INOV', 'AYLS', 'PSDN', 'CHEM', 'PICO', 'INCI', 'FLMC', 'SBMA', 'DPNS', 'OILS', 'POLY', 'AMMS', 'PTPS', 'GULA', 'ACRO', 'LMAX'],
-  'Process Industries': ['TPIA', 'PGUN', 'CPIN', 'JARR', 'INKP', 'TAPG', 'JPFA', 'AVIA', 'TKIM', 'STAA', 'SSMS', 'AALI', 'SMAR', 'NSSS', 'TLDN', 'LSIP', 'SGRO', 'ANJT', 'PALM', 'AGII', 'BWPT', 'TBLA', 'UDNG', 'PACK', 'PBID', 'CPRO', 'SAMF', 'ARGO', 'PNGO', 'MGRO', 'BISI', 'JAWA', 'TFCO', 'BRAM', 'MLIA', 'DGWG', 'GZCO', 'CSRA', 'INDR', 'MSJA', 'MAIN', 'AMFG', 'NEST'],
-  'Consumer Non-Durables': ['PANI', 'ICBP', 'HMSP', 'UNVR', 'INDF', 'MYOR', 'FAPA', 'GGRM', 'POLU', 'YUPI', 'ULTJ', 'GOOD', 'STTP', 'MLBI', 'CLEO', 'FISH', 'SIMP', 'ADES', 'BEEF', 'DMND', 'PSGO', 'ROTI', 'CBUT', 'VICI', 'KEJU', 'UNIC', 'WIIM', 'UCID', 'KINO', 'STRK', 'DLTA', 'CEKA', 'EURO', 'SKLT', 'CAMP', 'TCID', 'AISA', 'COCO', 'SKBM', 'SURI', 'GUNA', 'TRIS', 'MAXI', 'WINE', 'CRAB', 'ZONE', 'BEER', 'BELL', 'SRSN', 'NAYZ', 'MBTO', 'ITIC', 'BOBA', 'WAPO', 'DSFI', 'IKAN', 'SOUL', 'NASI', 'ENZO', 'BATA', 'BIMA', 'RICY', 'PCAR', 'BRRC', 'KLIN', 'ISEA', 'TAYS'],
-  'Communications': ['TLKM', 'ISAT', 'MTEL', 'EXCL', 'MORA', 'DATA', 'LINK', 'CENT', 'INET', 'GHON', 'MSKY', 'JAST', 'DNET'],
-  'Consumer Services': ['EMTK', 'FILM', 'MSIN', 'SCMA', 'BUVA', 'CNMA', 'ALII', 'JSPT', 'CLAY', 'INPP', 'FORE', 'MAPB', 'PNIN', 'BHIT', 'SINI', 'BMTR', 'BLTZ', 'FAST', 'RAAM', 'IPTV', 'MINA', 'ENAK', 'OMRE', 'ARTA', 'MDIA', 'PKST', 'NATO', 'BOLA', 'FITT', 'SHID', 'PANR', 'PJAA', 'PZZA', 'PNSE', 'VERN', 'ESTA', 'VIVA', 'BAYU', 'IBOS', 'PDES', 'KBLV', 'EAST', 'SOTS', 'HAJJ', 'HRME', 'ABBA', 'CSMI', 'PTSP', 'MARI', 'SNLK', 'TMPO', 'DFAM', 'PGLI', 'RBMS', 'ICON', 'PLAN', 'GRPH', 'BAIK', 'KDTN', 'RAFI', 'KAQI'],
-  'Retail Trade': ['AMRT', 'BELI', 'MDIY', 'MAPI', 'BUKA', 'MAPA', 'MIDI', 'ACES', 'LPPF', 'RALS', 'DAYA', 'MLPL', 'HERO', 'SONA', 'BOGA', 'CARS', 'DEPO', 'PMJS', 'ERAL', 'RANC', 'BABY', 'MPPA', 'KONI', 'UFOE', 'ZATA', 'MDRN', 'DEWI', 'ECII', 'GLOB', 'KIOS', 'DOSS'],
-  'Health Services': ['SRAJ', 'MIKA', 'SILO', 'HEAL', 'PRAY', 'CARE', 'SAME', 'MTMH', 'PRDA', 'WIRG', 'BMHS', 'RSCH', 'PRIM', 'DGNS', 'DKHH'],
-  'Producer Manufacturing': ['IMPC', 'AUTO', 'SMSM', 'DRMA', 'ARNA', 'TOTO', 'BOLT', 'BUKK', 'KMTR', 'SCCO', 'INDS', 'KBLI', 'MKAP', 'VOKS', 'TBMS', 'JECC', 'HALO', 'CCSI', 'KBLM', 'AMIN', 'BINO', 'KRYA', 'HOPE', 'LION', 'PSSI', 'IKAI', 'APII', 'GEMA', 'CINT', 'ESIP', 'SEMA', 'KUAS', 'PART', 'INCF', 'OBAT', 'ASPR', 'ISAP', 'AEGS', 'SAPX', 'KARW', 'BSML', 'PTIS', 'HELI', 'PURA'],
-  'Transportation': ['TCPI', 'JSMR', 'SHIP', 'RMKE', 'GIAA', 'CMNP', 'TMAS', 'CBRE', 'SMDR', 'CASS', 'BIRD', 'PORT', 'BESS', 'GMFI', 'ELPI', 'BULL', 'MBSS', 'HATM', 'HUMI', 'TPMA', 'IPCC', 'WINS', 'SOCI', 'GTSI', 'IPCM', 'CMPP', 'MITI', 'TAMU', 'BLTA', 'NELY', 'BBRM', 'GTRA', 'HAIS', 'RIGS', 'KLAS', 'WEHA', 'TAXI', 'LAJU', 'SAFE', 'TRUK', 'TNCA', 'KJEN', 'PPGL', 'SDMY', 'JAYA', 'LRNA', 'ARKA', 'CANI', 'PSAT', 'MPXL', 'LOPI', 'BOAT', 'BLOG'],
-  'Industrial Services': ['PTRO', 'SSIA', 'BNBR', 'IBST', 'BALI', 'CTBN', 'ARKO', 'RONY', 'TEBE', 'TOTL', 'PBSA', 'ACST', 'PTPP', 'ADHI', 'NRCA', 'KETR', 'BBSS', 'ASLI', 'JKON', 'UNIQ', 'MHKI', 'IDPR', 'BEST', 'WTON', 'PPRE', 'PTPW', 'BDKR', 'PKPK', 'WEGE', 'DGIK', 'LEAD', 'APEX', 'ATLA', 'SMKM', 'LCKM', 'MIRA', 'WOWS', 'RUIS', 'MTPS', 'RGAS', 'KOKA', 'SOLA', 'INTA'],
-  'Distribution Services': ['CMRY', 'AKRA', 'TSPC', 'ERAA', 'EPMT', 'TGKA', 'MPMX', 'HEXA', 'MDLA', 'IATA', 'CSAP', 'SPTO', 'BUAH', 'LTLS', 'BIKE', 'MMIX', 'ASLC', 'SMGA'],
-  'Health Technology': ['KLBF', 'SIDO', 'SOHO', 'PYFA', 'OMED', 'KAEF', 'DVLA', 'MERK', 'IKPM', 'MEDS', 'CHEK', 'SQBI'],
-  'Consumer Durables': ['CITA', 'VKTR', 'HRTA', 'IMAS', 'GJTL', 'WOOD', 'POLI', 'MGLV', 'RODA', 'GPRA', 'UNTD', 'KSIX', 'DART', 'SCNP', 'GDYR', 'TYRE', 'NTBK', 'MANG', 'OLIV', 'CAKK', 'LMPI', 'INTD', 'LAND', 'KICI', 'BAPA', 'TAMA', 'SPRE'],
-  'Commercial Services': ['PNLF', 'BPII', 'MNCN', 'BHAT', 'FUTR', 'DMMX', 'JTPE', 'OASA', 'MKTR', 'NETV', 'DOOH', 'SOSS', 'KING', 'LFLO', 'FORU', 'GOLF', 'DYAN', 'MUTU', 'NANO', 'LUCY', 'HDIT', 'IDEA', 'BMBL', 'NAIK', 'HYGN', 'CSRN', 'MERI', 'TOOL', 'PADA', 'MPIX'],
-  'Miscellaneous': ['RATU', 'COIN'],
-  'Electronic Technology': ['MTDL', 'PTSN', 'AXIO', 'IKBI', 'LPIN', 'ZYRX', 'RCCC']
+  'Basic Materials': ['ADMG', 'AGII', 'AKPI', 'ALDO', 'ALKA', 'ALMI', 'ANTM', 'APLI', 'BAJA', 'BMSR', 'BRMS', 'BRNA', 'BRPT', 'BTON', 'CITA', 'CLPI', 'CTBN', 'DKFT', 'DPNS', 'EKAD', 'ESSA', 'ETWA', 'FASW', 'FPNI', 'GDST', 'IGAR', 'INAI', 'INCI', 'INCO', 'INKP', 'INRU', 'INTD', 'INTP', 'IPOL', 'ISSP', 'KBRI', 'KDSI', 'KRAS', 'LMSH', 'LTLS', 'MDKA', 'NIKL', 'OKAS', 'PICO', 'PSAB', 'SIMA', 'SMBR', 'SMCB', 'SMGR', 'SPMA', 'SQMI', 'SRSN', 'SULI', 'TALF', 'TBMS', 'TINS', 'TIRT', 'TKIM', 'TPIA', 'TRST', 'UNIC', 'WTON', 'YPAS', 'INCF', 'WSBP', 'KMTR', 'MDKI', 'ZINC', 'PBID', 'TDPM', 'SWAT', 'MOLI', 'HKMU', 'KAYU', 'SMKL', 'GGRP', 'OPMS', 'PURE', 'ESIP', 'IFSH', 'IFII', 'SAMF', 'EPAC', 'BEBS', 'NPGF', 'ARCI', 'NICL', 'SBMA', 'CMNT', 'OBMD', 'AVIA', 'CHEM', 'KKES', 'PDPP', 'FWCT', 'PACK', 'AMMN', 'PPRI', 'SMGA', 'SOLA', 'BATR', 'BLES', 'PTMR', 'DAAZ', 'DGWG', 'MINE', 'ASPR', 'EMAS', 'AYLS', 'NCKL', 'MBMA', 'NICE', 'SMLE'],
+  'Consumer Cyclicals': ['ABBA', 'ACES', 'AKKU', 'ARGO', 'ARTA', 'AUTO', 'BATA', 'BAYU', 'BIMA', 'BLTZ', 'BMTR', 'BOLT', 'BRAM', 'BUVA', 'CINT', 'CNTX', 'CSAP', 'ECII', 'ERAA', 'ERTX', 'ESTI', 'FAST', 'FORU', 'GDYR', 'GEMA', 'GJTL', 'GLOB', 'GWSA', 'HOME', 'HOTL', 'IIKP', 'IMAS', 'INDR', 'INDS', 'JIHD', 'JSPT', 'KICI', 'KPIG', 'LMPI', 'LPIN', 'LPPF', 'MAPI', 'MDIA', 'MGNA', 'MICE', 'MNCN', 'MPMX', 'MSKY', 'MYTX', 'PANR', 'PBRX', 'PDES', 'PGLI', 'PJAA', 'PNSE', 'POLY', 'PSKT', 'PTSP', 'RALS', 'RICY', 'SCMA', 'SHID', 'SMSM', 'SONA', 'SRIL', 'SSTM', 'TELE', 'TFCO', 'TMPO', 'TRIO', 'TRIS', 'UNIT', 'VIVA', 'JGLE', 'MARI', 'MKNT', 'BOGA', 'CARS', 'MINA', 'MAPB', 'WOOD', 'HRTA', 'MABA', 'BELL', 'DFAM', 'PZZA', 'MSIN', 'MAPA', 'NUSA', 'FILM', 'DIGI', 'DUCK', 'YELO', 'SOTS', 'ZONE', 'CLAY', 'NATO', 'HRME', 'FITT', 'BOLA', 'POLU', 'IPTV', 'EAST', 'KOTA', 'INOV', 'SLIS', 'PMJS', 'SBAT', 'CBMF', 'CSMI', 'SOFA', 'TOYS', 'SCNP', 'PLAN', 'SNLK', 'LFLO', 'LUCY', 'MGLV', 'IDEA', 'DEPO', 'DRMA', 'ASLC', 'NETV', 'BAUT', 'ENAK', 'BIKE', 'OLIV', 'SWID', 'RAFI', 'KLIN', 'TOOL', 'KDTN', 'ZATA', 'ISAP', 'BMBL', 'FUTR', 'HAJJ', 'TYRE', 'VKTR', 'CNMA', 'ERAL', 'LMAX', 'BABY', 'AEGS', 'GRPH', 'UNTD', 'MEJA', 'LIVE', 'BAIK', 'SPRE', 'PART', 'GOLF', 'DOSS', 'VERN', 'MDIY', 'MERI', 'PMUI', 'KAQI', 'ESTA', 'RAAM', 'DOOH', 'ACRO', 'UFOE'],
+  'Consumer Non-Cyclicals': ['AALI', 'ADES', 'AISA', 'ALTO', 'AMRT', 'ANJT', 'BISI', 'BTEK', 'BUDI', 'BWPT', 'CEKA', 'CPIN', 'CPRO', 'DLTA', 'DSFI', 'DSNG', 'EPMT', 'FISH', 'GGRM', 'GOLL', 'GZCO', 'HERO', 'HMSP', 'ICBP', 'INDF', 'JAWA', 'JPFA', 'LAPD', 'LSIP', 'MAGP', 'MAIN', 'MBTO', 'MIDI', 'MLBI', 'MLPL', 'MPPA', 'MRAT', 'MYOR', 'PSDN', 'RANC', 'ROTI', 'SDPC', 'SGRO', 'SIMP', 'SIPD', 'SKBM', 'SKLT', 'SMAR', 'SSMS', 'STTP', 'TBLA', 'TCID', 'TGKA', 'ULTJ', 'UNSP', 'UNVR', 'WAPO', 'WICO', 'WIIM', 'DAYA', 'DPUM', 'KINO', 'CLEO', 'HOKI', 'CAMP', 'PCAR', 'MGRO', 'ANDI', 'GOOD', 'FOOD', 'BEEF', 'COCO', 'ITIC', 'KEJU', 'PSGO', 'AGAR', 'UCID', 'CSRA', 'DMND', 'IKAN', 'PGUN', 'PNGO', 'KMDS', 'ENZO', 'VICI', 'PMMP', 'WMUU', 'TAPG', 'FLMC', 'OILS', 'BOBA', 'CMRY', 'TAYS', 'WMPP', 'IPPE', 'NASI', 'STAA', 'NANO', 'TLDN', 'IBOS', 'ASHA', 'TRGU', 'DEWI', 'GULA', 'JARR', 'AMMS', 'EURO', 'BUAH', 'CRAB', 'CBUT', 'MKTR', 'SOUL', 'BEER', 'WINE', 'NAYZ', 'NSSS', 'MAXI', 'GRPM', 'TGUK', 'PTPS', 'STRK', 'UDNG', 'AYAM', 'ISEA', 'GUNA', 'NEST', 'BRRC', 'RLCO', 'YUPI', 'FORE', 'MSJA', 'FAPA'],
+  'Energy': ['ABMM', 'ADRO', 'AIMS', 'AKRA', 'APEX', 'ARII', 'ARTI', 'BBRM', 'BIPI', 'BSSR', 'BULL', 'BUMI', 'BYAN', 'CANI', 'CNKO', 'DEWA', 'DOID', 'DSSA', 'ELSA', 'ENRG', 'GEMS', 'GTBO', 'HITS', 'HRUM', 'IATA', 'INDY', 'ITMA', 'ITMG', 'KKGI', 'KOPI', 'LEAD', 'MBAP', 'MBSS', 'MEDC', 'MTFN', 'MYOH', 'PGAS', 'PKPK', 'PTBA', 'PTIS', 'PTRO', 'RAJA', 'RIGS', 'RUIS', 'SMMT', 'SMRU', 'SOCI', 'SUGI', 'TOBA', 'TPMA', 'TRAM', 'WINS', 'SHIP', 'TAMU', 'FIRE', 'PSSI', 'DWGL', 'BOSS', 'JSKY', 'INPS', 'TCPI', 'SURE', 'WOWS', 'TEBE', 'SGER', 'UNIQ', 'MCOL', 'GTSI', 'RMKE', 'BSML', 'ADMR', 'SEMA', 'SICO', 'COAL', 'SUNI', 'CBRE', 'HILL', 'CUAN', 'MAHA', 'RMKO', 'HUMI', 'RGAS', 'ALII', 'MKAP', 'ATLA', 'BOAT', 'AADI', 'RATU', 'PSAT', 'BESS', 'CGAS'],
+  'Financials': ['ABDA', 'ADMF', 'AGRO', 'AGRS', 'AHAP', 'AMAG', 'APIC', 'ARTO', 'ASBI', 'ASDM', 'ASJT', 'ASMI', 'ASRM', 'BABP', 'BACA', 'BBCA', 'BBHI', 'BBKP', 'BBLD', 'BBMD', 'BBNI', 'BBRI', 'BBTN', 'BBYB', 'BCAP', 'BCIC', 'BDMN', 'BEKS', 'BFIN', 'BGTG', 'BINA', 'BJBR', 'BJTM', 'BKSW', 'BMAS', 'BMRI', 'BNBA', 'BNGA', 'BNII', 'BNLI', 'BPFI', 'BPII', 'BSIM', 'BSWD', 'BTPN', 'BVIC', 'CFIN', 'DEFI', 'DNAR', 'DNET', 'GSMF', 'HDFA', 'INPC', 'LPGI', 'LPPS', 'MAYA', 'MCOR', 'MEGA', 'MREI', 'NISP', 'NOBU', 'OCAP', 'PADI', 'PALM', 'PANS', 'PEGE', 'PLAS', 'PNBN', 'PNBS', 'PNIN', 'PNLF', 'POOL', 'RELI', 'SDRA', 'SMMA', 'SRTG', 'STAR', 'TIFA', 'TRIM', 'TRUS', 'VICO', 'VINS', 'VRNA', 'WOMF', 'YULE', 'CASA', 'BRIS', 'MTWI', 'JMAS', 'NICK', 'BTPS', 'TUGU', 'POLA', 'SFAN', 'LIFE', 'FUJI', 'AMAR', 'AMOR', 'BHAT', 'BBSI', 'BANK', 'MASB', 'VTNY', 'YOII', 'COIN'],
+  'Healthcare': ['BMHS', 'CARE', 'CHEK', 'DGNS', 'DKHH', 'DVLA', 'HALO', 'HEAL', 'IKPM', 'INAF', 'IRRA', 'KAEF', 'KLBF', 'LABS', 'MDLA', 'MEDS', 'MERK', 'MIKA', 'MMIX', 'MTMH', 'OBAT', 'OMED', 'PEHA', 'PEVE', 'PRAY', 'PRDA', 'PRIM', 'PYFA', 'RSCH', 'RSGK', 'SAME', 'SCPI', 'SIDO', 'SILO', 'SOHO', 'SRAJ', 'SURI', 'TSPC'],
+  'Industrials': ['AMFG', 'AMIN', 'APII', 'ARNA', 'ASGR', 'ASII', 'BHIT', 'BNBR', 'CTTH', 'DYAN', 'HEXA', 'IBFN', 'ICON', 'IKAI', 'IKBI', 'IMPC', 'INDX', 'INTA', 'JECC', 'JTPE', 'KBLI', 'KBLM', 'KIAS', 'KOBX', 'KOIN', 'KONI', 'LION', 'MDRN', 'MFMI', 'MLIA', 'SCCO', 'TIRA', 'TOTO', 'TRIL', 'UNTR', 'VOKS', 'ZBRA', 'MARK', 'SPTO', 'SKRN', 'CAKK', 'SOSS', 'CCSI', 'BLUE', 'ARKA', 'SINI', 'HOPE', 'LABA', 'GPSO', 'KUAS', 'BINO', 'NTBK', 'PADA', 'KING', 'PTMP', 'SMIL', 'CRSN', 'WIDI', 'FOLK', 'MUTU', 'HYGN', 'VISI', 'MHKI', 'NAIK', 'PIPA'],
+  'Infrastructures': ['ACST', 'ADHI', 'BALI', 'BTEL', 'BUKK', 'CASS', 'CENT', 'CMNP', 'DGIK', 'EXCL', 'GOLD', 'HADE', 'IBST', 'ISAT', 'JKON', 'JSMR', 'KARW', 'KBLV', 'LINK', 'META', 'NRCA', 'PTPP', 'SSIA', 'SUPR', 'TBIG', 'TLKM', 'TOTL', 'TOWR', 'WIKA', 'WSKT', 'IDPR', 'MTRA', 'OASA', 'POWR', 'PBSA', 'PORT', 'TGRA', 'TOPS', 'MPOW', 'GMFI', 'PPRE', 'WEGE', 'MORA', 'IPCM', 'LCKM', 'GHON', 'IPCC', 'MTPS', 'JAST', 'KEEN', 'PTPW', 'TAMA', 'RONY', 'PTDU', 'FIMP', 'MTEL', 'SMKM', 'ARKO', 'KRYA', 'PGEO', 'BDKR', 'INET', 'BREN', 'KOKA', 'ASLI', 'DATA', 'HGII', 'CDIA', 'MANG', 'KETR'],
+  'Properties & Real Estate': ['APLN', 'ASRI', 'BAPA', 'BCIP', 'BEST', 'BIKA', 'BIPP', 'BKDP', 'BKSL', 'BSDE', 'COWL', 'CTRA', 'DART', 'DILD', 'DMAS', 'DUTI', 'ELTY', 'EMDE', 'FMII', 'GAMA', 'GMTD', 'GPRA', 'INPP', 'JRPT', 'KIJA', 'LCGP', 'LPCK', 'LPKR', 'LPLI', 'MDLN', 'MKPI', 'MMLP', 'MTLA', 'MTSM', 'NIRO', 'OMRE', 'PLIN', 'PPRO', 'PUDP', 'PWON', 'RBMS', 'RDTX', 'RIMO', 'RODA', 'SMDM', 'SMRA', 'TARA', 'CSIS', 'ARMY', 'NASA', 'RISE', 'POLL', 'LAND', 'PANI', 'CITY', 'MPRO', 'SATU', 'URBN', 'POLI', 'CPRI', 'POSA', 'PAMG', 'BAPI', 'NZIA', 'REAL', 'INDO', 'TRIN', 'KBAG', 'BBSS', 'UANG', 'PURI', 'HOMI', 'ROCK', 'ATAP', 'ADCP', 'TRUE', 'IPAC', 'WINR', 'BSBK', 'CBPE', 'VAST', 'SAGE', 'RELF', 'HBAT', 'GRIA', 'MSIE', 'KOCI', 'KSIX', 'CBDK', 'DADA', 'ASPI', 'AMAN'],
+  'Technology': ['ATIC', 'EMTK', 'KREN', 'LMAS', 'MLPT', 'MTDL', 'PTSN', 'SKYB', 'KIOS', 'MCAS', 'NFCX', 'DIVA', 'LUCK', 'ENVY', 'HDIT', 'TFAS', 'DMMX', 'GLVA', 'PGJO', 'CASH', 'TECH', 'EDGE', 'ZYRX', 'UVCR', 'BUKA', 'RUNS', 'WGSH', 'WIRG', 'GOTO', 'AXIO', 'BELI', 'NINE', 'ELIT', 'IRSX', 'CHIP', 'TRON', 'JATI', 'CYBR', 'IOTF', 'MSTI', 'TOSK', 'MPIX', 'AREA', 'MENN', 'AWAN', 'WIFI', 'DCII'],
+  'Transportation & Logistic': ['AKSI', 'ASSA', 'BIRD', 'BLTA', 'CMPP', 'GIAA', 'IMJS', 'LRNA', 'MIRA', 'MITI', 'NELY', 'SAFE', 'SDMU', 'SMDR', 'TAXI', 'TMAS', 'WEHA', 'HELI', 'TRUK', 'TNCA', 'BPTR', 'SAPX', 'DEAL', 'JAYA', 'KJEN', 'PURA', 'PPGL', 'TRJA', 'HAIS', 'HATM', 'RCCC', 'ELPI', 'LAJU', 'GTRA', 'MPXL', 'KLAS', 'LOPI', 'BLOG', 'PJHB'],
 };
 
 // Initialize bot with robust polling
@@ -763,7 +754,7 @@ function formatFullOversoldResults(results) {
     : 'N/A';
   
   message += `━━━━━━━━━━━━━━━━━━━━\n`;
-  message += `📈 Scanned: ${getAllIDXStocks().length}\n`;
+  message += `📈 Scanned: IDX stocks\n`;
   message += `🟢 BUY: ${buySignals.length} | 🟡 POTENTIAL: ${potentialSignals.length}\n`;
   message += `⏱️ Updated: ${updateTime} WIB\n\n`;
   message += `⚠️ _Not financial advice_`;
@@ -801,7 +792,7 @@ function formatMomentumResults(results) {
   
   message += `━━━━━━━━━━━━━━━━━━━━\n`;
   message += `🔥 52W breakout | ✅ Liquid | ⚠️ Low liquidity\n`;
-  message += `📈 Scanned: ${getAllIDXStocks().length} | Showing: Top 30\n`;
+  message += `📈 Scanned: IDX stocks | Showing: Top 30\n`;
   message += `⏱️ Updated: ${updateTime} WIB\n\n`;
   message += `⚠️ _Not financial advice_`;
   
@@ -3163,9 +3154,9 @@ bot.onText(/\/scanall/, async (msg) => {
     // No cache or cache too old - start fresh scan
     const processingMsg = await bot.sendMessage(chatId, 
       `📊 *Full IDX Oversold Scan*\n\n` +
-      `🔍 Scanning ${allStocks.length} stocks...\n` +
+      `🔍 Scanning IDX stocks...\n` +
       `⏱️ Estimated time: ~${Math.ceil(allStocks.length * 0.4 / 60)} minutes\n\n` +
-      `Progress: 0/${allStocks.length}`,
+      `Progress: Starting...`,
       { parse_mode: 'Markdown' }
     );
     
@@ -3174,8 +3165,8 @@ bot.onText(/\/scanall/, async (msg) => {
         if (processed % 100 === 0 || processed === total) {
           await bot.editMessageText(
             `📊 *Full IDX Oversold Scan*\n\n` +
-            `🔍 Scanning ${total} stocks...\n\n` +
-            `Progress: ${processed}/${total} (${Math.round(processed/total*100)}%)`,
+            `🔍 Scanning IDX stocks...\n\n` +
+            `Progress: ${Math.round(processed/total*100)}%`,
             { chat_id: chatId, message_id: processingMsg.message_id, parse_mode: 'Markdown' }
           ).catch(() => {});
         }
@@ -3240,9 +3231,9 @@ bot.onText(/\/momentum/, async (msg) => {
     // No cache or cache too old - start fresh scan
     const processingMsg = await bot.sendMessage(chatId, 
       `🚀 *IDX Momentum Scan*\n\n` +
-      `🔍 Scanning ${allStocks.length} stocks...\n` +
+      `🔍 Scanning IDX stocks...\n` +
       `⏱️ Estimated time: ~${Math.ceil(allStocks.length * 0.4 / 60)} minutes\n\n` +
-      `Progress: 0/${allStocks.length}`,
+      `Progress: Starting...`,
       { parse_mode: 'Markdown' }
     );
     
@@ -3251,8 +3242,8 @@ bot.onText(/\/momentum/, async (msg) => {
         if (processed % 100 === 0 || processed === total) {
           await bot.editMessageText(
             `🚀 *IDX Momentum Scan*\n\n` +
-            `🔍 Scanning ${total} stocks...\n\n` +
-            `Progress: ${processed}/${total} (${Math.round(processed/total*100)}%)`,
+            `🔍 Scanning IDX stocks...\n\n` +
+            `Progress: ${Math.round(processed/total*100)}%`,
             { chat_id: chatId, message_id: processingMsg.message_id, parse_mode: 'Markdown' }
           ).catch(() => {});
         }
@@ -3392,9 +3383,9 @@ bot.on('callback_query', async (callbackQuery) => {
     const allStocks = getAllIDXStocks();
     const processingMsg = await bot.sendMessage(chatId, 
       `📊 *Full IDX Oversold Scan*\n\n` +
-      `🔍 Scanning ${allStocks.length} stocks...\n` +
+      `🔍 Scanning IDX stocks...\n` +
       `⏱️ Estimated time: ~${Math.ceil(allStocks.length * 0.4 / 60)} minutes\n\n` +
-      `Progress: 0/${allStocks.length}`,
+      `Progress: Starting...`,
       { parse_mode: 'Markdown' }
     );
     
@@ -3403,8 +3394,8 @@ bot.on('callback_query', async (callbackQuery) => {
         if (processed % 100 === 0 || processed === total) {
           await bot.editMessageText(
             `📊 *Full IDX Oversold Scan*\n\n` +
-            `🔍 Scanning ${total} stocks...\n\n` +
-            `Progress: ${processed}/${total} (${Math.round(processed/total*100)}%)`,
+            `🔍 Scanning IDX stocks...\n\n` +
+            `Progress: ${Math.round(processed/total*100)}%`,
             { chat_id: chatId, message_id: processingMsg.message_id, parse_mode: 'Markdown' }
           ).catch(() => {});
         }
@@ -3447,9 +3438,9 @@ bot.on('callback_query', async (callbackQuery) => {
     const allStocks = getAllIDXStocks();
     const processingMsg = await bot.sendMessage(chatId, 
       `🚀 *IDX Momentum Scan*\n\n` +
-      `🔍 Scanning ${allStocks.length} stocks...\n` +
+      `🔍 Scanning IDX stocks...\n` +
       `⏱️ Estimated time: ~${Math.ceil(allStocks.length * 0.4 / 60)} minutes\n\n` +
-      `Progress: 0/${allStocks.length}`,
+      `Progress: Starting...`,
       { parse_mode: 'Markdown' }
     );
     
@@ -3458,8 +3449,8 @@ bot.on('callback_query', async (callbackQuery) => {
         if (processed % 100 === 0 || processed === total) {
           await bot.editMessageText(
             `🚀 *IDX Momentum Scan*\n\n` +
-            `🔍 Scanning ${total} stocks...\n\n` +
-            `Progress: ${processed}/${total} (${Math.round(processed/total*100)}%)`,
+            `🔍 Scanning IDX stocks...\n\n` +
+            `Progress: ${Math.round(processed/total*100)}%`,
             { chat_id: chatId, message_id: processingMsg.message_id, parse_mode: 'Markdown' }
           ).catch(() => {});
         }
@@ -3497,7 +3488,7 @@ bot.on('callback_query', async (callbackQuery) => {
       const results = await screenSector(sectorName, chatId, async (processed, total) => {
         await bot.editMessageText(
           `Screening ${sectorName}...\n\n` +
-          `Progress: ${processed}/${total} (${Math.round(processed/total*100)}%)`,
+          `Progress: ${Math.round(processed/total*100)}%`,
           {
             chat_id: chatId,
             message_id: confirmMsg.message_id
