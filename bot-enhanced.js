@@ -708,7 +708,14 @@ async function performMomentumScan(progressCallback = null) {
 
 // Format full oversold scan results
 function formatFullOversoldResults(results) {
-  const withSignals = results.filter(r => r.signal && !r.error);
+  // Filter: must have signal, no error, and K/D must be <= 30 (truly oversold)
+  const withSignals = results.filter(r => {
+    if (!r.signal || r.error) return false;
+    const kValue = parseFloat(r.k);
+    const dValue = parseFloat(r.d);
+    return kValue <= 30 && dValue <= 30;
+  });
+  
   const buySignals = withSignals.filter(r => r.signal.includes('BUY'));
   const potentialSignals = withSignals.filter(r => r.signal.includes('POTENTIAL'));
   
