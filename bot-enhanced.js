@@ -704,9 +704,9 @@ function formatFullOversoldResults(results) {
       const priceFormatted = typeof r.price === 'number' ? r.price.toLocaleString() : r.price;
       const valueFormatted = formatIDR(r.avgVolumeIDR || 0);
       
-      message += `*${r.symbol}* | ${priceFormatted} | K:${r.k} D:${r.d} | ${valueFormatted} ${liquidityIcon}\n`;
+      message += `*${r.symbol}* ${liquidityIcon}\n`;
+      message += `Rp ${priceFormatted} | K:${r.k} D:${r.d} | ${valueFormatted}\n\n`;
     });
-    message += `\n`;
   }
   
   if (potentialSignals.length > 0) {
@@ -719,7 +719,8 @@ function formatFullOversoldResults(results) {
       const priceFormatted = typeof r.price === 'number' ? r.price.toLocaleString() : r.price;
       const valueFormatted = formatIDR(r.avgVolumeIDR || 0);
       
-      message += `*${r.symbol}* | ${priceFormatted} | K:${r.k} D:${r.d} | ${valueFormatted} ${liquidityIcon}\n`;
+      message += `*${r.symbol}* ${liquidityIcon}\n`;
+      message += `Rp ${priceFormatted} | K:${r.k} D:${r.d} | ${valueFormatted}\n\n`;
     });
   }
   
@@ -731,8 +732,9 @@ function formatFullOversoldResults(results) {
     ? cachedFullScan.lastOversoldUpdate.toLocaleTimeString('en-GB', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit' })
     : 'N/A';
   
-  message += `\n━━━━━━━━━━━━━━━━━━━━\n`;
-  message += `📈 Scanned: ${getAllIDXStocks().length} | 🟢 BUY: ${buySignals.length} | 🟡 POTENTIAL: ${potentialSignals.length}\n`;
+  message += `━━━━━━━━━━━━━━━━━━━━\n`;
+  message += `📈 Scanned: ${getAllIDXStocks().length}\n`;
+  message += `🟢 BUY: ${buySignals.length} | 🟡 POTENTIAL: ${potentialSignals.length}\n`;
   message += `⏱️ Updated: ${updateTime} WIB\n\n`;
   message += `⚠️ _Not financial advice_`;
   
@@ -743,13 +745,10 @@ function formatFullOversoldResults(results) {
 function formatMomentumResults(results) {
   let message = `🚀 *IDX Momentum - Top 30 Movers*\n\n`;
   
-  message += `Symbol | Chg% | Price | MA5 | 52W | Value\n`;
-  message += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-  
-  results.forEach(r => {
+  results.forEach((r, index) => {
     const changeFormatted = r.priceChange >= 0 ? `+${r.priceChange.toFixed(2)}%` : `${r.priceChange.toFixed(2)}%`;
     const priceFormatted = typeof r.price === 'number' ? r.price.toLocaleString() : r.price;
-    const ma5Formatted = typeof r.ma5 === 'number' ? r.ma5.toFixed(0) : r.ma5;
+    const ma5Formatted = typeof r.ma5 === 'number' ? Math.round(r.ma5).toLocaleString() : r.ma5;
     const near52wFormatted = r.near52w ? r.near52w.toFixed(2) : 'N/A';
     const valueFormatted = formatIDR(r.avgVolumeIDR || 0);
     
@@ -761,14 +760,16 @@ function formatMomentumResults(results) {
       icon = '⚠️'; // Low liquidity
     }
     
-    message += `*${r.symbol}* | ${changeFormatted} | ${priceFormatted} | ${ma5Formatted} | ${near52wFormatted} | ${valueFormatted} ${icon}\n`;
+    message += `*${r.symbol}* ${icon}\n`;
+    message += `${changeFormatted} | Rp ${priceFormatted}\n`;
+    message += `MA5: ${ma5Formatted} | 52W: ${near52wFormatted} | ${valueFormatted}\n\n`;
   });
   
   const updateTime = cachedFullScan.lastMomentumUpdate 
     ? cachedFullScan.lastMomentumUpdate.toLocaleTimeString('en-GB', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit' })
     : 'N/A';
   
-  message += `\n━━━━━━━━━━━━━━━━━━━━\n`;
+  message += `━━━━━━━━━━━━━━━━━━━━\n`;
   message += `🔥 52W breakout | ✅ Liquid | ⚠️ Low liquidity\n`;
   message += `📈 Scanned: ${getAllIDXStocks().length} | Showing: Top 30\n`;
   message += `⏱️ Updated: ${updateTime} WIB\n\n`;
