@@ -1549,29 +1549,19 @@ bot.onText(/\/subscribe/, (msg) => {
     bot.sendMessage(chatId, '✅ You are already subscribed to auto-scan alerts!');
   } else {
     subscribers.add(chatId);
-    
-    // Set default sectors if user doesn't have any
-    if (!userSectors.has(chatId)) {
-      userSectors.set(chatId, AUTO_SCAN_CONFIG.DEFAULT_SECTORS);
-    }
-    
     saveData();
-    
-    const userSelectedSectors = getUserSectors(chatId);
     
     bot.sendMessage(chatId, `
 🔔 *Subscribed to Auto-Scan Alerts!*
 
-You will receive alerts at:
-☀️ 08:00 WIB - Daily Summary
-☀️ 10:00 WIB - Morning Scan
-🌤️ 13:00 WIB - Afternoon Scan
-🌆 16:00 WIB - Evening Scan
+You will receive Full IDX scans at:
+☀️ 10:00 WIB - Oversold Scan
+🌤️ 13:00 WIB - Oversold Scan
+🚀 15:30 WIB - Momentum Scan
+🌆 16:00 WIB - Oversold Scan
 
-*Your monitored sectors (${userSelectedSectors.length}):*
-${userSelectedSectors.map(s => `• ${s}`).join('\n')}
+📈 All scans cover ~900 IDX stocks
 
-Use /mysectors to customize
 Use /unsubscribe to stop alerts
     `, { parse_mode: 'Markdown' });
   }
