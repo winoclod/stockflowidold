@@ -47,7 +47,8 @@ const AUTO_SCAN_CONFIG = {
     MORNING_SCAN: '10:00',
     AFTERNOON_SCAN: '13:00',
     EVENING_SCAN: '16:00',
-    DAILY_SUMMARY: '08:00', // New: Daily summary time
+    DAILY_SUMMARY: '08:00',
+    MOMENTUM_SCAN: '15:30', // New: Momentum scan near market close
   }
 };
 
@@ -60,6 +61,14 @@ const lastScanResults = new Map(); // Store last scan results for daily summary
 const allowedUsers = new Set(); // Whitelist of allowed user IDs
 const pendingApprovals = new Set(); // Users waiting for approval
 const blockedUsers = new Set(); // Blocked users
+
+// Cached results for full IDX scans
+const cachedFullScan = {
+  oversold: [],
+  momentum: [],
+  lastOversoldUpdate: null,
+  lastMomentumUpdate: null
+};
 
 // Access history tracking
 const accessHistory = []; // Array of {userId, username, timestamp, command, result}
@@ -520,6 +529,314 @@ function formatResults(results, sectorName = '') {
   return message;
 }
 
+// ============================================
+// FULL IDX SCAN FUNCTIONS
+// ============================================
+
+// Get all IDX stocks from all sectors
+function getAllIDXStocks() {
+  const allStocks = new Set();
+  Object.values(IDX_SECTORS).forEach(stocks => {
+    stocks.forEach(stock => allStocks.add(stock));
+  });
+  return Array.from(allStocks);
+}
+
+// Enhanced stock screening with momentum data
+async function screenStockFull(symbol) {
+  try {
+    const data = await getStockData(symbol);
+    const stoch = calculateStochastic(data);
+    
+    if (!stoch) {
+      return { symbol, error: 'Calculation failed' };
+    }
+    
+    const signal = analyzeStochastic(stoch);
+    const lastData = data[data.length - 1];
+    const prevData = data[data.length - 2];
+    
+    // Calculate average volume (20-day)
+    const recentData = data.slice(-20);
+    const avgVolume = recentData.reduce((sum, d) => sum + d.volume, 0) / recentData.length;
+    
+    // Volume in IDR (value traded)
+    const volumeIDR = lastData.volume * lastData.close;
+    const avgVolumeIDR = avgVolume * lastData.close;
+    
+    // Liquidity check
+    const isLiquid = avgVolumeIDR >= MIN_AVG_VALUE_IDR;
+    
+    // 1-day price change
+    const priceChange = prevData ? ((lastData.close - prevData.close) / prevData.close) * 100 : 0;
+    
+    // 52-week high calculation
+    const high52w = Math.max(...data.map(d => d.high));
+    const near52w = lastData.close / high52w;
+    
+    // MA5 calculation
+    const last5 = data.slice(-5);
+    const ma5 = last5.reduce((sum, d) => sum + d.close, 0) / 5;
+    
+    return {
+      symbol,
+      price: lastData.close,
+      priceChange: priceChange,
+      k: stoch.k.toFixed(2),
+      d: stoch.d.toFixed(2),
+      signal,
+      volume: lastData.volume,
+      avgVolume: Math.round(avgVolume),
+      volumeIDR: volumeIDR,
+      avgVolumeIDR: avgVolumeIDR,
+      isLiquid: isLiquid,
+      near52w: near52w,
+      ma5: ma5,
+      date: lastData.date.toISOString().split('T')[0]
+    };
+  } catch (error) {
+    return { symbol, error: error.message };
+  }
+}
+
+// Full IDX scan for oversold signals
+async function performFullOversoldScan(progressCallback = null) {
+  console.log('Starting full IDX oversold scan...');
+  const allStocks = getAllIDXStocks();
+  const total = allStocks.length;
+  let processed = 0;
+  const results = [];
+  
+  for (let i = 0; i < allStocks.length; i += CONFIG.MAX_CONCURRENT) {
+    const batch = allStocks.slice(i, i + CONFIG.MAX_CONCURRENT);
+    
+    const batchPromises = batch.map(symbol => 
+      screenStockFull(symbol).catch(error => ({
+        symbol,
+        error: error.message || 'Unknown error'
+      }))
+    );
+    
+    const batchResults = await Promise.all(batchPromises);
+    results.push(...batchResults);
+    processed += batchResults.length;
+    
+    if (progressCallback && (processed % 50 === 0 || processed === total)) {
+      await progressCallback(processed, total);
+    }
+    
+    // Rate limiting
+    await new Promise(resolve => setTimeout(resolve, CONFIG.WAIT_TIME));
+  }
+  
+  // Filter only stocks with signals
+  const withSignals = results.filter(r => r.signal && !r.error);
+  
+  // Cache the results
+  cachedFullScan.oversold = withSignals;
+  cachedFullScan.lastOversoldUpdate = new Date();
+  
+  console.log(`Full oversold scan complete. Found ${withSignals.length} signals from ${total} stocks.`);
+  return results;
+}
+
+// Full IDX scan for momentum (top movers)
+async function performMomentumScan(progressCallback = null) {
+  console.log('Starting full IDX momentum scan...');
+  const allStocks = getAllIDXStocks();
+  const total = allStocks.length;
+  let processed = 0;
+  const results = [];
+  
+  for (let i = 0; i < allStocks.length; i += CONFIG.MAX_CONCURRENT) {
+    const batch = allStocks.slice(i, i + CONFIG.MAX_CONCURRENT);
+    
+    const batchPromises = batch.map(symbol => 
+      screenStockFull(symbol).catch(error => ({
+        symbol,
+        error: error.message || 'Unknown error'
+      }))
+    );
+    
+    const batchResults = await Promise.all(batchPromises);
+    results.push(...batchResults);
+    processed += batchResults.length;
+    
+    if (progressCallback && (processed % 50 === 0 || processed === total)) {
+      await progressCallback(processed, total);
+    }
+    
+    // Rate limiting
+    await new Promise(resolve => setTimeout(resolve, CONFIG.WAIT_TIME));
+  }
+  
+  // Filter valid results and sort by price change
+  const validResults = results.filter(r => !r.error && r.priceChange !== undefined);
+  validResults.sort((a, b) => b.priceChange - a.priceChange);
+  
+  // Take top 30 movers
+  const topMovers = validResults.slice(0, 30);
+  
+  // Cache the results
+  cachedFullScan.momentum = topMovers;
+  cachedFullScan.lastMomentumUpdate = new Date();
+  
+  console.log(`Momentum scan complete. Top ${topMovers.length} movers from ${total} stocks.`);
+  return topMovers;
+}
+
+// Format full oversold scan results
+function formatFullOversoldResults(results) {
+  const withSignals = results.filter(r => r.signal && !r.error);
+  const buySignals = withSignals.filter(r => r.signal.includes('BUY'));
+  const potentialSignals = withSignals.filter(r => r.signal.includes('POTENTIAL'));
+  
+  let message = `📊 *IDX Full Scan - Oversold Signals*\n\n`;
+  
+  if (buySignals.length > 0) {
+    message += `🟢 *BUY SIGNALS (${buySignals.length})*\n\n`;
+    
+    // Sort by liquidity
+    buySignals.sort((a, b) => (b.avgVolumeIDR || 0) - (a.avgVolumeIDR || 0));
+    
+    buySignals.forEach(r => {
+      const liquidityIcon = r.isLiquid ? '✅' : '⚠️';
+      const priceFormatted = typeof r.price === 'number' ? r.price.toLocaleString() : r.price;
+      const valueFormatted = formatIDR(r.avgVolumeIDR || 0);
+      
+      message += `*${r.symbol}* | ${priceFormatted} | K:${r.k} D:${r.d} | ${valueFormatted} ${liquidityIcon}\n`;
+    });
+    message += `\n`;
+  }
+  
+  if (potentialSignals.length > 0) {
+    message += `🟡 *POTENTIAL (${potentialSignals.length})*\n\n`;
+    
+    potentialSignals.sort((a, b) => (b.avgVolumeIDR || 0) - (a.avgVolumeIDR || 0));
+    
+    potentialSignals.forEach(r => {
+      const liquidityIcon = r.isLiquid ? '✅' : '⚠️';
+      const priceFormatted = typeof r.price === 'number' ? r.price.toLocaleString() : r.price;
+      const valueFormatted = formatIDR(r.avgVolumeIDR || 0);
+      
+      message += `*${r.symbol}* | ${priceFormatted} | K:${r.k} D:${r.d} | ${valueFormatted} ${liquidityIcon}\n`;
+    });
+  }
+  
+  if (withSignals.length === 0) {
+    message += `No oversold signals found.\n`;
+  }
+  
+  const updateTime = cachedFullScan.lastOversoldUpdate 
+    ? cachedFullScan.lastOversoldUpdate.toLocaleTimeString('en-GB', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit' })
+    : 'N/A';
+  
+  message += `\n━━━━━━━━━━━━━━━━━━━━\n`;
+  message += `📈 Scanned: ${getAllIDXStocks().length} | 🟢 BUY: ${buySignals.length} | 🟡 POTENTIAL: ${potentialSignals.length}\n`;
+  message += `⏱️ Updated: ${updateTime} WIB\n\n`;
+  message += `⚠️ _Not financial advice_`;
+  
+  return message;
+}
+
+// Format momentum scan results
+function formatMomentumResults(results) {
+  let message = `🚀 *IDX Momentum - Top 30 Movers*\n\n`;
+  
+  message += `Symbol | Chg% | Price | MA5 | 52W | Value\n`;
+  message += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+  
+  results.forEach(r => {
+    const changeFormatted = r.priceChange >= 0 ? `+${r.priceChange.toFixed(2)}%` : `${r.priceChange.toFixed(2)}%`;
+    const priceFormatted = typeof r.price === 'number' ? r.price.toLocaleString() : r.price;
+    const ma5Formatted = typeof r.ma5 === 'number' ? r.ma5.toFixed(0) : r.ma5;
+    const near52wFormatted = r.near52w ? r.near52w.toFixed(2) : 'N/A';
+    const valueFormatted = formatIDR(r.avgVolumeIDR || 0);
+    
+    // Icons
+    let icon = '✅';
+    if (r.near52w >= 1.0) {
+      icon = '🔥'; // Breaking 52W high
+    } else if (!r.isLiquid) {
+      icon = '⚠️'; // Low liquidity
+    }
+    
+    message += `*${r.symbol}* | ${changeFormatted} | ${priceFormatted} | ${ma5Formatted} | ${near52wFormatted} | ${valueFormatted} ${icon}\n`;
+  });
+  
+  const updateTime = cachedFullScan.lastMomentumUpdate 
+    ? cachedFullScan.lastMomentumUpdate.toLocaleTimeString('en-GB', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit' })
+    : 'N/A';
+  
+  message += `\n━━━━━━━━━━━━━━━━━━━━\n`;
+  message += `🔥 52W breakout | ✅ Liquid | ⚠️ Low liquidity\n`;
+  message += `📈 Scanned: ${getAllIDXStocks().length} | Showing: Top 30\n`;
+  message += `⏱️ Updated: ${updateTime} WIB\n\n`;
+  message += `⚠️ _Not financial advice_`;
+  
+  return message;
+}
+
+// Scheduled full oversold scan (runs at 10:00, 13:00, 16:00)
+async function performScheduledOversoldScan(scanName) {
+  console.log(`Running scheduled oversold scan: ${scanName}`);
+  
+  try {
+    await performFullOversoldScan();
+    
+    // Notify subscribers if there are signals
+    if (cachedFullScan.oversold.length > 0) {
+      const message = formatFullOversoldResults(cachedFullScan.oversold);
+      
+      for (const chatId of subscribers) {
+        try {
+          // Split message if too long
+          if (message.length > 4096) {
+            const chunks = message.match(/[\s\S]{1,4096}/g);
+            for (const chunk of chunks) {
+              await bot.sendMessage(chatId, chunk, { parse_mode: 'Markdown' });
+            }
+          } else {
+            await bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
+          }
+        } catch (error) {
+          console.error(`Failed to send oversold scan to ${chatId}:`, error.message);
+        }
+      }
+    }
+  } catch (error) {
+    console.error(`Scheduled oversold scan failed:`, error.message);
+  }
+}
+
+// Scheduled momentum scan (runs at 15:30)
+async function performScheduledMomentumScan() {
+  console.log('Running scheduled momentum scan (15:30 WIB)');
+  
+  try {
+    await performMomentumScan();
+    
+    // Notify subscribers
+    if (cachedFullScan.momentum.length > 0) {
+      const message = formatMomentumResults(cachedFullScan.momentum);
+      
+      for (const chatId of subscribers) {
+        try {
+          await bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
+        } catch (error) {
+          console.error(`Failed to send momentum scan to ${chatId}:`, error.message);
+        }
+      }
+    }
+  } catch (error) {
+    console.error(`Scheduled momentum scan failed:`, error.message);
+  }
+}
+
+// ============================================
+// END FULL IDX SCAN FUNCTIONS
+// ============================================
+
 // Get user's sectors or default
 function getUserSectors(chatId) {
   return userSectors.get(chatId) || AUTO_SCAN_CONFIG.DEFAULT_SECTORS;
@@ -950,6 +1267,12 @@ function setupAutoScans() {
     sendDailySummary();
   }, { timezone: CONFIG.TIMEZONE });
   
+  // Momentum scan (15:30 WIB - near market close)
+  const [momentumHour, momentumMin] = AUTO_SCAN_CONFIG.SCHEDULE.MOMENTUM_SCAN.split(':');
+  cron.schedule(`${momentumMin} ${momentumHour} * * 1-5`, () => {
+    performScheduledMomentumScan();
+  }, { timezone: CONFIG.TIMEZONE });
+  
   // Watchlist check (every hour during market hours)
   cron.schedule('0 9-15 * * 1-5', () => {
     checkWatchlist();
@@ -964,6 +1287,7 @@ function setupAutoScans() {
   console.log(`   • Daily Summary: ${AUTO_SCAN_CONFIG.SCHEDULE.DAILY_SUMMARY} WIB`);
   console.log(`   • Morning Scan: ${AUTO_SCAN_CONFIG.SCHEDULE.MORNING_SCAN} WIB`);
   console.log(`   • Afternoon Scan: ${AUTO_SCAN_CONFIG.SCHEDULE.AFTERNOON_SCAN} WIB`);
+  console.log(`   • Momentum Scan: ${AUTO_SCAN_CONFIG.SCHEDULE.MOMENTUM_SCAN} WIB`);
   console.log(`   • Evening Scan: ${AUTO_SCAN_CONFIG.SCHEDULE.EVENING_SCAN} WIB`);
   console.log(`   • Watchlist checks: Every hour during market hours`);
   console.log(`   • Performance update: 17:00 WIB (daily)`);
@@ -1190,6 +1514,10 @@ bot.onText(/\/help/, (msg) => {
 • /screen - Screen a sector
 • /stock BBCA - Check single stock
 
+*Full IDX Scans:*
+• /scanall - Full IDX oversold scan
+• /momentum - Top 30 movers (full IDX)
+
 *Auto-Scan Alerts:*
 • /subscribe - Get auto alerts
 • /unsubscribe - Stop alerts
@@ -1220,6 +1548,7 @@ bot.onText(/\/help/, (msg) => {
 ☀️ 08:00 - Daily Summary
 ☀️ 10:00 - Morning Scan
 🌤️ 13:00 - Afternoon Scan
+🚀 15:30 - Momentum Scan
 🌆 16:00 - Evening Scan
 🔄 17:00 - Performance Update
   `, { parse_mode: 'Markdown' });
@@ -2840,6 +3169,161 @@ bot.onText(/\/sectors/, (msg) => {
   })) return;
 });
 
+// ============================================
+// FULL IDX SCAN COMMANDS
+// ============================================
+
+// /scanall - Full IDX oversold scan
+bot.onText(/\/scanall/, async (msg) => {
+  const chatId = msg.chat.id;
+  
+  if (!checkAccess(msg, async () => {
+    const allStocks = getAllIDXStocks();
+    
+    // Check if we have cached results
+    if (cachedFullScan.oversold.length > 0 && cachedFullScan.lastOversoldUpdate) {
+      const ageMinutes = (Date.now() - cachedFullScan.lastOversoldUpdate.getTime()) / 1000 / 60;
+      
+      // If cache is less than 30 minutes old, offer to use it
+      if (ageMinutes < 30) {
+        const keyboard = [
+          [{ text: '📋 Show Cached Results', callback_data: 'scanall_cached' }],
+          [{ text: '🔄 Run Fresh Scan', callback_data: 'scanall_fresh' }]
+        ];
+        
+        const updateTime = cachedFullScan.lastOversoldUpdate.toLocaleTimeString('en-GB', { 
+          timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit' 
+        });
+        
+        bot.sendMessage(chatId, 
+          `📊 *Full IDX Oversold Scan*\n\n` +
+          `Cached results available from ${updateTime} WIB (${Math.round(ageMinutes)} min ago)\n` +
+          `Found: ${cachedFullScan.oversold.length} signals\n\n` +
+          `Total stocks to scan: ${allStocks.length}\n` +
+          `Estimated time for fresh scan: ~${Math.ceil(allStocks.length * 0.4 / 60)} minutes\n\n` +
+          `Choose an option:`,
+          { parse_mode: 'Markdown', reply_markup: { inline_keyboard: keyboard } }
+        );
+        return;
+      }
+    }
+    
+    // No cache or cache too old - start fresh scan
+    const processingMsg = await bot.sendMessage(chatId, 
+      `📊 *Full IDX Oversold Scan*\n\n` +
+      `🔍 Scanning ${allStocks.length} stocks...\n` +
+      `⏱️ Estimated time: ~${Math.ceil(allStocks.length * 0.4 / 60)} minutes\n\n` +
+      `Progress: 0/${allStocks.length}`,
+      { parse_mode: 'Markdown' }
+    );
+    
+    try {
+      await performFullOversoldScan(async (processed, total) => {
+        if (processed % 100 === 0 || processed === total) {
+          await bot.editMessageText(
+            `📊 *Full IDX Oversold Scan*\n\n` +
+            `🔍 Scanning ${total} stocks...\n\n` +
+            `Progress: ${processed}/${total} (${Math.round(processed/total*100)}%)`,
+            { chat_id: chatId, message_id: processingMsg.message_id, parse_mode: 'Markdown' }
+          ).catch(() => {});
+        }
+      });
+      
+      const message = formatFullOversoldResults(cachedFullScan.oversold);
+      
+      // Delete processing message and send results
+      await bot.deleteMessage(chatId, processingMsg.message_id).catch(() => {});
+      
+      if (message.length > 4096) {
+        const chunks = message.match(/[\s\S]{1,4096}/g);
+        for (const chunk of chunks) {
+          await bot.sendMessage(chatId, chunk, { parse_mode: 'Markdown' });
+        }
+      } else {
+        await bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
+      }
+    } catch (error) {
+      bot.editMessageText(`❌ Error: ${error.message}`, {
+        chat_id: chatId,
+        message_id: processingMsg.message_id
+      });
+    }
+  })) return;
+});
+
+// /momentum - Full IDX momentum scan (top movers)
+bot.onText(/\/momentum/, async (msg) => {
+  const chatId = msg.chat.id;
+  
+  if (!checkAccess(msg, async () => {
+    const allStocks = getAllIDXStocks();
+    
+    // Check if we have cached results
+    if (cachedFullScan.momentum.length > 0 && cachedFullScan.lastMomentumUpdate) {
+      const ageMinutes = (Date.now() - cachedFullScan.lastMomentumUpdate.getTime()) / 1000 / 60;
+      
+      // If cache is less than 30 minutes old, offer to use it
+      if (ageMinutes < 30) {
+        const keyboard = [
+          [{ text: '📋 Show Cached Results', callback_data: 'momentum_cached' }],
+          [{ text: '🔄 Run Fresh Scan', callback_data: 'momentum_fresh' }]
+        ];
+        
+        const updateTime = cachedFullScan.lastMomentumUpdate.toLocaleTimeString('en-GB', { 
+          timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit' 
+        });
+        
+        bot.sendMessage(chatId, 
+          `🚀 *IDX Momentum Scan*\n\n` +
+          `Cached results available from ${updateTime} WIB (${Math.round(ageMinutes)} min ago)\n\n` +
+          `Total stocks to scan: ${allStocks.length}\n` +
+          `Estimated time for fresh scan: ~${Math.ceil(allStocks.length * 0.4 / 60)} minutes\n\n` +
+          `Choose an option:`,
+          { parse_mode: 'Markdown', reply_markup: { inline_keyboard: keyboard } }
+        );
+        return;
+      }
+    }
+    
+    // No cache or cache too old - start fresh scan
+    const processingMsg = await bot.sendMessage(chatId, 
+      `🚀 *IDX Momentum Scan*\n\n` +
+      `🔍 Scanning ${allStocks.length} stocks...\n` +
+      `⏱️ Estimated time: ~${Math.ceil(allStocks.length * 0.4 / 60)} minutes\n\n` +
+      `Progress: 0/${allStocks.length}`,
+      { parse_mode: 'Markdown' }
+    );
+    
+    try {
+      await performMomentumScan(async (processed, total) => {
+        if (processed % 100 === 0 || processed === total) {
+          await bot.editMessageText(
+            `🚀 *IDX Momentum Scan*\n\n` +
+            `🔍 Scanning ${total} stocks...\n\n` +
+            `Progress: ${processed}/${total} (${Math.round(processed/total*100)}%)`,
+            { chat_id: chatId, message_id: processingMsg.message_id, parse_mode: 'Markdown' }
+          ).catch(() => {});
+        }
+      });
+      
+      const message = formatMomentumResults(cachedFullScan.momentum);
+      
+      // Delete processing message and send results
+      await bot.deleteMessage(chatId, processingMsg.message_id).catch(() => {});
+      await bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
+    } catch (error) {
+      bot.editMessageText(`❌ Error: ${error.message}`, {
+        chat_id: chatId,
+        message_id: processingMsg.message_id
+      });
+    }
+  })) return;
+});
+
+// ============================================
+// END FULL IDX SCAN COMMANDS
+// ============================================
+
 bot.onText(/\/screen/, (msg) => {
   const chatId = msg.chat.id;
   
@@ -2929,6 +3413,115 @@ bot.on('callback_query', async (callbackQuery) => {
       text: '🚫 You have been blocked from using this bot.',
       show_alert: true
     });
+    return;
+  }
+  
+  // Handle scanall cached/fresh callbacks
+  if (data === 'scanall_cached') {
+    bot.answerCallbackQuery(callbackQuery.id);
+    await bot.deleteMessage(chatId, msg.message_id).catch(() => {});
+    
+    const message = formatFullOversoldResults(cachedFullScan.oversold);
+    if (message.length > 4096) {
+      const chunks = message.match(/[\s\S]{1,4096}/g);
+      for (const chunk of chunks) {
+        await bot.sendMessage(chatId, chunk, { parse_mode: 'Markdown' });
+      }
+    } else {
+      await bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
+    }
+    return;
+  }
+  
+  if (data === 'scanall_fresh') {
+    bot.answerCallbackQuery(callbackQuery.id);
+    await bot.deleteMessage(chatId, msg.message_id).catch(() => {});
+    
+    const allStocks = getAllIDXStocks();
+    const processingMsg = await bot.sendMessage(chatId, 
+      `📊 *Full IDX Oversold Scan*\n\n` +
+      `🔍 Scanning ${allStocks.length} stocks...\n` +
+      `⏱️ Estimated time: ~${Math.ceil(allStocks.length * 0.4 / 60)} minutes\n\n` +
+      `Progress: 0/${allStocks.length}`,
+      { parse_mode: 'Markdown' }
+    );
+    
+    try {
+      await performFullOversoldScan(async (processed, total) => {
+        if (processed % 100 === 0 || processed === total) {
+          await bot.editMessageText(
+            `📊 *Full IDX Oversold Scan*\n\n` +
+            `🔍 Scanning ${total} stocks...\n\n` +
+            `Progress: ${processed}/${total} (${Math.round(processed/total*100)}%)`,
+            { chat_id: chatId, message_id: processingMsg.message_id, parse_mode: 'Markdown' }
+          ).catch(() => {});
+        }
+      });
+      
+      const message = formatFullOversoldResults(cachedFullScan.oversold);
+      await bot.deleteMessage(chatId, processingMsg.message_id).catch(() => {});
+      
+      if (message.length > 4096) {
+        const chunks = message.match(/[\s\S]{1,4096}/g);
+        for (const chunk of chunks) {
+          await bot.sendMessage(chatId, chunk, { parse_mode: 'Markdown' });
+        }
+      } else {
+        await bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
+      }
+    } catch (error) {
+      bot.editMessageText(`❌ Error: ${error.message}`, {
+        chat_id: chatId,
+        message_id: processingMsg.message_id
+      });
+    }
+    return;
+  }
+  
+  // Handle momentum cached/fresh callbacks
+  if (data === 'momentum_cached') {
+    bot.answerCallbackQuery(callbackQuery.id);
+    await bot.deleteMessage(chatId, msg.message_id).catch(() => {});
+    
+    const message = formatMomentumResults(cachedFullScan.momentum);
+    await bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
+    return;
+  }
+  
+  if (data === 'momentum_fresh') {
+    bot.answerCallbackQuery(callbackQuery.id);
+    await bot.deleteMessage(chatId, msg.message_id).catch(() => {});
+    
+    const allStocks = getAllIDXStocks();
+    const processingMsg = await bot.sendMessage(chatId, 
+      `🚀 *IDX Momentum Scan*\n\n` +
+      `🔍 Scanning ${allStocks.length} stocks...\n` +
+      `⏱️ Estimated time: ~${Math.ceil(allStocks.length * 0.4 / 60)} minutes\n\n` +
+      `Progress: 0/${allStocks.length}`,
+      { parse_mode: 'Markdown' }
+    );
+    
+    try {
+      await performMomentumScan(async (processed, total) => {
+        if (processed % 100 === 0 || processed === total) {
+          await bot.editMessageText(
+            `🚀 *IDX Momentum Scan*\n\n` +
+            `🔍 Scanning ${total} stocks...\n\n` +
+            `Progress: ${processed}/${total} (${Math.round(processed/total*100)}%)`,
+            { chat_id: chatId, message_id: processingMsg.message_id, parse_mode: 'Markdown' }
+          ).catch(() => {});
+        }
+      });
+      
+      const message = formatMomentumResults(cachedFullScan.momentum);
+      await bot.deleteMessage(chatId, processingMsg.message_id).catch(() => {});
+      await bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
+    } catch (error) {
+      bot.editMessageText(`❌ Error: ${error.message}`, {
+        chat_id: chatId,
+        message_id: processingMsg.message_id
+      });
+    }
     return;
   }
   
