@@ -1589,7 +1589,7 @@ You will receive Full IDX scans at:
 🚀 15:30 WIB - Momentum Scan
 🌆 16:00 WIB - Oversold Scan
 
-📈 All scans cover ~900 IDX stocks
+📈 All scans cover ~955 IDX stocks
 
 Use /unsubscribe to stop alerts
     `, { parse_mode: 'Markdown' });
