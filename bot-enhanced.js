@@ -764,7 +764,7 @@ function formatFullOversoldResults(results) {
   message += `📈 Scanned: IDX stocks\n`;
   message += `🟢 BUY: ${buySignals.length} | 🟡 POTENTIAL: ${potentialSignals.length}\n`;
   message += `⏱️ Updated: ${updateTime} WIB\n\n`;
-  message += `⚠️ _Not financial advice_`;
+  message += `⚠️ _Low Liquidity_`;
   
   return message;
 }
