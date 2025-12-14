@@ -45,7 +45,6 @@ const AUTO_SCAN_CONFIG = {
   ],
   SCHEDULE: {
     MORNING_SCAN: '10:00',
-    AFTERNOON_SCAN: '13:00',
     MOMENTUM_SCAN: '15:30',
     EVENING_SCAN: '16:00',
   }
@@ -806,7 +805,7 @@ function formatMomentumResults(results) {
   return message;
 }
 
-// Scheduled full oversold scan (runs at 10:00, 13:00, 16:00)
+// Scheduled full oversold scan (runs at 10:00, 16:00)
 async function performScheduledFullOversoldScan(scanName) {
   console.log(`Running scheduled oversold scan: ${scanName}`);
   
@@ -1278,12 +1277,6 @@ function setupAutoScans() {
     performScheduledFullOversoldScan('Morning Scan (10:00 WIB)');
   }, { timezone: CONFIG.TIMEZONE });
   
-  // Afternoon full IDX oversold scan (13:00 WIB)
-  const [afternoonHour, afternoonMin] = AUTO_SCAN_CONFIG.SCHEDULE.AFTERNOON_SCAN.split(':');
-  cron.schedule(`${afternoonMin} ${afternoonHour} * * 1-5`, () => {
-    performScheduledFullOversoldScan('Afternoon Scan (13:00 WIB)');
-  }, { timezone: CONFIG.TIMEZONE });
-  
   // Momentum scan (15:30 WIB - near market close)
   const [momentumHour, momentumMin] = AUTO_SCAN_CONFIG.SCHEDULE.MOMENTUM_SCAN.split(':');
   cron.schedule(`${momentumMin} ${momentumHour} * * 1-5`, () => {
@@ -1308,7 +1301,6 @@ function setupAutoScans() {
   
   console.log('✅ Auto-scan schedules set up:');
   console.log(`   • Morning Oversold (Full IDX): ${AUTO_SCAN_CONFIG.SCHEDULE.MORNING_SCAN} WIB`);
-  console.log(`   • Afternoon Oversold (Full IDX): ${AUTO_SCAN_CONFIG.SCHEDULE.AFTERNOON_SCAN} WIB`);
   console.log(`   • Momentum Scan (Full IDX): ${AUTO_SCAN_CONFIG.SCHEDULE.MOMENTUM_SCAN} WIB`);
   console.log(`   • Evening Oversold (Full IDX): ${AUTO_SCAN_CONFIG.SCHEDULE.EVENING_SCAN} WIB`);
   console.log(`   • Watchlist checks: Every hour during market hours`);
@@ -1564,7 +1556,6 @@ bot.onText(/\/help/, (msg) => {
 
 *Scheduled Scans (WIB):*
 ☀️ 10:00 - Oversold (Full IDX)
-🌤️ 13:00 - Oversold (Full IDX)
 🚀 15:30 - Momentum (Full IDX)
 🌆 16:00 - Oversold (Full IDX)
 🔄 17:00 - Performance Update
@@ -1585,7 +1576,6 @@ bot.onText(/\/subscribe/, (msg) => {
 
 You will receive Full IDX scans at:
 ☀️ 10:00 WIB - Oversold Scan
-🌤️ 13:00 WIB - Oversold Scan
 🚀 15:30 WIB - Momentum Scan
 🌆 16:00 WIB - Oversold Scan
 
